@@ -13,6 +13,8 @@ import {
 } from "react";
 import {
   Camera,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   Clock3,
   Check,
@@ -26,6 +28,7 @@ import {
   Share2,
   Sparkles,
   Package,
+  X,
 } from "lucide-react";
 import { extractFaces, getFaceEngine } from "@/lib/face-engine";
 
@@ -95,7 +98,8 @@ export function GalleryFinder({
         ? ""
         : "Este link está incompleto. Peça o link privado ao fotógrafo.",
     ),
-    [consent, setConsent] = useState(false);
+    [consent, setConsent] = useState(false),
+    [previewId, setPreviewId] = useState<string | null>(null);
   const announced = useRef(false);
   const sentinel = useRef<HTMLDivElement>(null);
   const hours = useMemo(
@@ -109,6 +113,25 @@ export function GalleryFinder({
       ].sort((a, b) => a - b),
     [data],
   );
+  const previewIndex = photos.findIndex((photo) => photo.id === previewId);
+  const previewPhoto = previewIndex >= 0 ? photos[previewIndex] : null;
+
+  useEffect(() => {
+    if (!previewPhoto) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPreviewId(null);
+      if (event.key === "ArrowLeft" && previewIndex > 0)
+        setPreviewId(photos[previewIndex - 1].id);
+      if (event.key === "ArrowRight" && previewIndex < photos.length - 1)
+        setPreviewId(photos[previewIndex + 1].id);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [photos, previewIndex, previewPhoto]);
 
   const loadPhotos = useCallback(
     async (ids: string[], append = false) => {
@@ -658,15 +681,21 @@ export function GalleryFinder({
                       />
                     </button>
                   </div>
-                  <Image
-                    src={photo.previewUrl}
-                    alt={`Foto ${photo.name}`}
-                    width={720}
-                    height={540}
-                    loading="lazy"
-                    sizes="(max-width: 600px) 100vw, (max-width: 820px) 50vw, 33vw"
-                    unoptimized
-                  />
+                  <button
+                    className="photo-preview-trigger"
+                    onClick={() => setPreviewId(photo.id)}
+                    aria-label={`Ampliar ${photo.name}`}
+                  >
+                    <Image
+                      src={photo.previewUrl}
+                      alt={`Foto ${photo.name}`}
+                      width={720}
+                      height={540}
+                      loading="lazy"
+                      sizes="(max-width: 600px) 100vw, (max-width: 820px) 50vw, 33vw"
+                      unoptimized
+                    />
+                  </button>
                   <button className="download" onClick={() => download(photo)}>
                     <span className="mobile-save-icon">
                       <Share2 size={17} />
@@ -681,8 +710,8 @@ export function GalleryFinder({
               ))}
             </div>
             <p className="ios-save-note">
-              No iPhone, toque em <strong>Salvar foto</strong> e escolha
-              <strong> Salvar Imagem</strong> para adicionar ao app Fotos.
+              No celular, toque em <strong>Salvar foto</strong> e escolha
+              <strong> Fotos ou Salvar imagem</strong>.
             </p>
             <div ref={sentinel} className="load-sentinel" aria-hidden="true" />
             {!busy && loadedCount < currentIds.length && (
@@ -742,6 +771,67 @@ export function GalleryFinder({
             {busy ? status : "Baixar ZIP"}
           </button>
         </aside>
+      )}
+      {previewPhoto && (
+        <div
+          className="photo-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Visualização de ${previewPhoto.name}`}
+          onClick={() => setPreviewId(null)}
+        >
+          <button
+            className="lightbox-close"
+            onClick={() => setPreviewId(null)}
+            aria-label="Fechar visualização"
+          >
+            <X size={24} />
+          </button>
+          {previewIndex > 0 && (
+            <button
+              className="lightbox-arrow previous"
+              onClick={(event) => {
+                event.stopPropagation();
+                setPreviewId(photos[previewIndex - 1].id);
+              }}
+              aria-label="Foto anterior"
+            >
+              <ChevronLeft size={28} />
+            </button>
+          )}
+          <div
+            className="lightbox-content"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Image
+              src={previewPhoto.previewUrl}
+              alt={`Foto ampliada ${previewPhoto.name}`}
+              width={previewPhoto.width || 1280}
+              height={previewPhoto.height || 960}
+              sizes="100vw"
+              priority
+              unoptimized
+            />
+            <div className="lightbox-footer">
+              <span>{previewPhoto.name}</span>
+              <button className="button" onClick={() => download(previewPhoto)}>
+                <Share2 size={18} /> Salvar foto
+              </button>
+            </div>
+          </div>
+          {previewIndex < photos.length - 1 && (
+            <button
+              className="lightbox-arrow next"
+              onClick={(event) => {
+                event.stopPropagation();
+                setPreviewId(photos[previewIndex + 1].id);
+              }}
+              aria-label="Próxima foto"
+            >
+              <ChevronRight size={28} />
+            </button>
+          )}
+        </div>
       )}
       {data && (
         <footer className="gallery-footer">

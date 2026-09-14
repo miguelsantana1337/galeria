@@ -879,6 +879,84 @@ h2 {
   object-fit: cover;
   background: var(--line);
 }
+.photo-preview-trigger {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  cursor: zoom-in;
+  background: var(--line);
+}
+.photo-preview-trigger img {
+  transition: transform 180ms ease;
+}
+@media (hover: hover) {
+  .photo-preview-trigger:hover img {
+    transform: scale(1.025);
+  }
+}
+.photo-lightbox {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px 72px;
+  background: rgba(8, 12, 9, 0.94);
+  backdrop-filter: blur(10px);
+}
+.lightbox-content {
+  display: grid;
+  width: min(100%, 1180px);
+  max-height: calc(100dvh - 56px);
+  overflow: hidden;
+  border-radius: 18px;
+  background: #111713;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
+}
+.lightbox-content > img {
+  width: 100%;
+  max-height: calc(100dvh - 140px);
+  object-fit: contain;
+}
+.lightbox-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px 12px 20px;
+  color: #fff;
+}
+.lightbox-footer .button {
+  width: auto;
+}
+.lightbox-close,
+.lightbox-arrow {
+  position: fixed;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(8px);
+}
+.lightbox-close {
+  top: max(18px, env(safe-area-inset-top));
+  right: 18px;
+}
+.lightbox-arrow {
+  top: 50%;
+  transform: translateY(-50%);
+}
+.lightbox-arrow.previous {
+  left: 14px;
+}
+.lightbox-arrow.next {
+  right: 14px;
+}
 .download {
   display: flex;
   align-items: center;
@@ -911,6 +989,36 @@ h2 {
   }
 }
 @media (max-width: 600px) {
+  .photo-lightbox {
+    align-items: center;
+    padding: max(64px, env(safe-area-inset-top)) 12px
+      max(12px, env(safe-area-inset-bottom));
+  }
+  .lightbox-content {
+    max-height: calc(100dvh - 76px);
+    border-radius: 14px;
+  }
+  .lightbox-content > img {
+    max-height: calc(100dvh - 160px);
+  }
+  .lightbox-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+  }
+  .lightbox-footer > span {
+    display: none;
+  }
+  .lightbox-footer .button {
+    width: 100%;
+  }
+  .lightbox-arrow {
+    top: auto;
+    bottom: max(92px, calc(env(safe-area-inset-bottom) + 76px));
+    width: 44px;
+    height: 44px;
+  }
   .desktop-save-icon,
   .desktop-save-label {
     display: none;
