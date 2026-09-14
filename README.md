@@ -1,13 +1,13 @@
 # Minha Galeria
 
-Plataforma multi-evento para participantes encontrarem suas fotos por reconhecimento facial. O frontend roda na Vercel; autenticação, banco e fotos privadas usam Supabase.
+Plataforma multi-evento white-label para explorar galerias, filtrar fotos pelo horário e usar reconhecimento facial opcional. O frontend roda na Vercel; autenticação, banco e fotos privadas usam Supabase.
 
 ## Arquitetura de privacidade
 
 - A selfie é processada no navegador e não é enviada nem armazenada.
 - O painel calcula os descritores das fotos uma vez durante o upload.
 - As fotos ficam em bucket privado.
-- A galeria pública recebe URLs temporárias apenas para os resultados encontrados.
+- A galeria privada recebe URLs temporárias para prévias otimizadas e downloads originais.
 
 ## Desenvolvimento
 

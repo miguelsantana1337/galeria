@@ -10,7 +10,7 @@ const newsreader = Newsreader({
 
 export const metadata: Metadata = {
   title: "Minha Galeria",
-  description: "Encontre suas fotos de eventos com uma selfie.",
+  description: "Galerias de eventos bonitas, rápidas e fáceis de explorar.",
 };
 
 export default function RootLayout({

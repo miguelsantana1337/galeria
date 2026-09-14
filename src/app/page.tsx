@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Camera, LockKeyhole } from "lucide-react";
+import { Images, LockKeyhole } from "lucide-react";
 
 export default function Home() {
   return (
@@ -13,19 +13,19 @@ export default function Home() {
       <section className="hero">
         <div className="hero-card">
           <span className="eyebrow">
-            <Camera size={15} /> Sua história, no seu rosto
+            <Images size={15} /> Seus eventos, suas memórias
           </span>
           <h1>Encontre o seu momento.</h1>
           <p className="lead">
-            Abra o link privado enviado pelo fotógrafo e use uma selfie. Em
-            poucos instantes, você vê apenas as fotos em que aparece.
+            Abra o link privado enviado pelo fotógrafo, explore todos os
+            registros e encontre seus momentos pelo horário ou por uma selfie.
           </p>
           <Link className="button inline-button" href="/entrar">
             Sou fotógrafo
           </Link>
           <p className="privacy">
-            <LockKeyhole size={15} /> Sua selfie é analisada no seu aparelho e
-            não fica armazenada.
+            <LockKeyhole size={15} /> Galerias privadas e reconhecimento facial
+            opcional.
           </p>
         </div>
       </section>
