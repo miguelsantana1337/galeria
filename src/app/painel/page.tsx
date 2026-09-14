@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { EventsDashboard } from "@/components/events-dashboard";
 
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
@@ -10,8 +10,29 @@ export default async function DashboardPage() {
   if (!user) redirect("/entrar");
   const { data: events } = await supabase
     .from("events")
-    .select("id,name,slug,status,photo_count,created_at")
-    .order("created_at", { ascending: false });
+    .select(
+      "id,name,status,photo_count,event_date,expires_at,updated_at,banner_path",
+    )
+    .order("updated_at", { ascending: false });
+  const eventsWithBanners = await Promise.all(
+    (events || []).map(async (event) => ({
+      ...event,
+      banner_url: event.banner_path
+        ? (
+            await supabase.storage
+              .from("event-photos")
+              .createSignedUrl(event.banner_path, 3600, {
+                transform: {
+                  width: 720,
+                  height: 360,
+                  quality: 62,
+                  resize: "cover",
+                },
+              })
+          ).data?.signedUrl || null
+        : null,
+    })),
+  );
   return (
     <main className="page">
       <header className="topbar" style={{ paddingInline: 0 }}>
@@ -22,35 +43,12 @@ export default async function DashboardPage() {
       </header>
       <header className="page-header">
         <span className="eyebrow">Seus eventos</span>
-        <h1>Galerias prontas para encantar.</h1>
+        <h1>Seu arquivo de momentos.</h1>
+        <p className="lead align-left">
+          Encontre, acompanhe e reutilize a identidade dos seus eventos.
+        </p>
       </header>
-      <section className="panel">
-        <div className="stack">
-          <Link
-            className="button"
-            href="/painel/eventos/novo"
-            style={{ width: "fit-content", textDecoration: "none" }}
-          >
-            Criar novo evento
-          </Link>
-          {events?.length ? (
-            events.map((event) => (
-              <Link
-                key={event.id}
-                href={`/painel/eventos/${event.id}`}
-                className="notice"
-                style={{ textDecoration: "none" }}
-              >
-                <strong>{event.name}</strong>
-                <br />
-                {event.photo_count} fotos · {event.status}
-              </Link>
-            ))
-          ) : (
-            <p>Ainda não há eventos. Crie o primeiro para começar.</p>
-          )}
-        </div>
-      </section>
+      <EventsDashboard events={eventsWithBanners} />
     </main>
   );
 }
