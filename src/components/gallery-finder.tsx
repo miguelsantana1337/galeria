@@ -15,13 +15,16 @@ import {
   Camera,
   CheckCircle2,
   Clock3,
+  Check,
   Download,
   ExternalLink,
   Images,
+  Heart,
   LoaderCircle,
   LockKeyhole,
   RefreshCw,
   Sparkles,
+  Package,
 } from "lucide-react";
 import { extractFaces, getFaceEngine } from "@/lib/face-engine";
 
@@ -49,9 +52,9 @@ type ResultPhoto = {
   width: number;
   height: number;
   previewUrl: string;
-  downloadUrl: string;
 };
 type Mode = "gallery" | "selfie" | "matches";
+const PAGE_SIZE = 24;
 
 function activity(
   slug: string,
@@ -77,6 +80,11 @@ export function GalleryFinder({
 }) {
   const [data, setData] = useState<EventData | null>(null),
     [photos, setPhotos] = useState<ResultPhoto[]>([]),
+    [currentIds, setCurrentIds] = useState<string[]>([]),
+    [loadedCount, setLoadedCount] = useState(0),
+    [selected, setSelected] = useState<Set<string>>(new Set()),
+    [favorites, setFavorites] = useState<Set<string>>(new Set()),
+    [favoritesOnly, setFavoritesOnly] = useState(false),
     [mode, setMode] = useState<Mode>("gallery"),
     [hour, setHour] = useState("all"),
     [busy, setBusy] = useState(false),
@@ -88,6 +96,7 @@ export function GalleryFinder({
     ),
     [consent, setConsent] = useState(false);
   const announced = useRef(false);
+  const sentinel = useRef<HTMLDivElement>(null);
   const hours = useMemo(
     () =>
       [
@@ -101,7 +110,7 @@ export function GalleryFinder({
   );
 
   const loadPhotos = useCallback(
-    async (ids: string[]) => {
+    async (ids: string[], append = false) => {
       if (!ids.length) {
         setPhotos([]);
         return;
@@ -116,7 +125,18 @@ export function GalleryFinder({
         });
         if (!response.ok)
           throw new Error("Não foi possível carregar as fotos.");
-        setPhotos((await response.json()).photos || []);
+        const incoming = (await response.json()).photos || [];
+        setPhotos((old) =>
+          append
+            ? [
+                ...old,
+                ...incoming.filter(
+                  (photo: ResultPhoto) =>
+                    !old.some((item) => item.id === photo.id),
+                ),
+              ]
+            : incoming,
+        );
       } catch (e) {
         setError(
           e instanceof Error
@@ -129,6 +149,16 @@ export function GalleryFinder({
       }
     },
     [accessKey, slug],
+  );
+
+  const showIds = useCallback(
+    async (ids: string[]) => {
+      setCurrentIds(ids);
+      setLoadedCount(Math.min(PAGE_SIZE, ids.length));
+      setPhotos([]);
+      await loadPhotos(ids.slice(0, PAGE_SIZE));
+    },
+    [loadPhotos],
   );
 
   useEffect(() => {
@@ -148,14 +178,47 @@ export function GalleryFinder({
       .then((eventData: EventData) => {
         setData(eventData);
         setStatus("");
-        void loadPhotos(eventData.photos.map((photo) => photo.id));
+        void showIds(eventData.photos.map((photo) => photo.id));
         if (!announced.current) {
           announced.current = true;
           void activity(slug, accessKey, "view");
         }
       })
       .catch((e) => setError(e.message));
-  }, [accessKey, slug, loadPhotos]);
+  }, [accessKey, slug, showIds]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setFavorites(
+          new Set(
+            JSON.parse(
+              localStorage.getItem(`minha-galeria:favoritos:${slug}`) || "[]",
+            ),
+          ),
+        );
+      } catch {}
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [slug]);
+  useEffect(() => {
+    const node = sentinel.current;
+    if (!node || busy || loadedCount >= currentIds.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          const next = currentIds.slice(loadedCount, loadedCount + PAGE_SIZE);
+          setLoadedCount((count) =>
+            Math.min(count + PAGE_SIZE, currentIds.length),
+          );
+          void loadPhotos(next, true);
+        }
+      },
+      { rootMargin: "500px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [busy, currentIds, loadedCount, loadPhotos]);
 
   async function filterByHour(value: string) {
     setHour(value);
@@ -171,7 +234,8 @@ export function GalleryFinder({
                 new Date(photo.taken_at).getHours() === Number(value),
             )
             .map((photo) => photo.id);
-    await loadPhotos(ids);
+    setFavoritesOnly(false);
+    await showIds(ids);
   }
   async function find(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -214,7 +278,7 @@ export function GalleryFinder({
           "Não encontramos você com segurança. Tente outra selfie ou explore todas as fotos.",
         );
       }
-      await loadPhotos(ids);
+      await showIds(ids);
       setMode("matches");
       void activity(slug, accessKey, "match", ids.length);
     } catch (e) {
@@ -227,9 +291,91 @@ export function GalleryFinder({
       e.target.value = "";
     }
   }
-  function download(photo: ResultPhoto) {
-    void activity(slug, accessKey, "download", 1);
-    window.open(photo.downloadUrl, "_blank", "noopener,noreferrer");
+  async function getDownload(photoId: string) {
+    const response = await fetch(
+      `/api/public/events/${slug}/download/${photoId}?k=${encodeURIComponent(accessKey)}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) throw new Error("Download indisponível.");
+    return response.json() as Promise<{ url: string; name: string }>;
+  }
+  async function download(photo: ResultPhoto) {
+    try {
+      const file = await getDownload(photo.id);
+      void activity(slug, accessKey, "download", 1);
+      window.location.href = file.url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Download indisponível.");
+    }
+  }
+  function toggleFavorite(id: string) {
+    setFavorites((old) => {
+      const next = new Set(old);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      localStorage.setItem(
+        `minha-galeria:favoritos:${slug}`,
+        JSON.stringify([...next]),
+      );
+      return next;
+    });
+  }
+  function toggleSelected(id: string) {
+    setSelected((old) => {
+      const next = new Set(old);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  async function toggleFavoritesView() {
+    if (!data) return;
+    const next = !favoritesOnly;
+    setFavoritesOnly(next);
+    setHour("all");
+    setMode("gallery");
+    await showIds(
+      next
+        ? data.photos.map((p) => p.id).filter((id) => favorites.has(id))
+        : data.photos.map((p) => p.id),
+    );
+  }
+  async function downloadZip() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (ids.length > 50) {
+      setError("Selecione no máximo 50 fotos por arquivo ZIP.");
+      return;
+    }
+    setBusy(true);
+    setStatus(`Preparando 0 de ${ids.length}…`);
+    try {
+      const JSZip = (await import("jszip")).default,
+        zip = new JSZip();
+      for (let i = 0; i < ids.length; i++) {
+        setStatus(`Preparando ${i + 1} de ${ids.length}…`);
+        const item = await getDownload(ids[i]),
+          blob = await fetch(item.url).then((r) => r.blob());
+        zip.file(item.name, blob);
+      }
+      const blob = await zip.generateAsync({
+          type: "blob",
+          compression: "STORE",
+        }),
+        url = URL.createObjectURL(blob),
+        a = document.createElement("a");
+      a.href = url;
+      a.download = `${data?.event.name || "minha-galeria"}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      void activity(slug, accessKey, "download", ids.length);
+      setSelected(new Set());
+    } catch {
+      setError("Não foi possível montar o ZIP. Tente selecionar menos fotos.");
+    } finally {
+      setBusy(false);
+      setStatus("");
+    }
   }
   if (error && !data)
     return (
@@ -334,7 +480,7 @@ export function GalleryFinder({
               />
               <span>
                 Autorizo o reconhecimento facial apenas para localizar minhas
-                fotos neste evento.
+                fotos neste evento. Li a política de privacidade.
               </span>
             </label>
             <label
@@ -356,6 +502,9 @@ export function GalleryFinder({
                 Marque a autorização acima para liberar a selfie.
               </p>
             )}
+            <Link className="privacy-link" href="/privacidade" target="_blank">
+              Como protegemos seus dados
+            </Link>
             <button
               className="text-button gallery-back"
               onClick={() => {
@@ -411,6 +560,16 @@ export function GalleryFinder({
               >
                 <Camera size={18} /> Encontrar pela selfie
               </button>
+              <button
+                className={`button secondary ${favoritesOnly ? "active-filter" : ""}`}
+                onClick={() => void toggleFavoritesView()}
+              >
+                <Heart
+                  size={18}
+                  fill={favoritesOnly ? "currentColor" : "none"}
+                />{" "}
+                Favoritas {favorites.size ? `(${favorites.size})` : ""}
+              </button>
             </div>
             {hours.length === 0 && data && (
               <p className="timeline-note">
@@ -443,7 +602,35 @@ export function GalleryFinder({
             )}
             <div className="photo-grid">
               {photos.map((photo) => (
-                <article key={photo.id} className="photo-card">
+                <article
+                  key={photo.id}
+                  className={`photo-card ${selected.has(photo.id) ? "selected" : ""}`}
+                >
+                  <div className="photo-card-actions">
+                    <button
+                      aria-label={
+                        selected.has(photo.id)
+                          ? "Remover da seleção"
+                          : "Selecionar foto"
+                      }
+                      onClick={() => toggleSelected(photo.id)}
+                    >
+                      {selected.has(photo.id) ? <Check size={18} /> : <span />}
+                    </button>
+                    <button
+                      aria-label={
+                        favorites.has(photo.id)
+                          ? "Remover dos favoritos"
+                          : "Favoritar foto"
+                      }
+                      onClick={() => toggleFavorite(photo.id)}
+                    >
+                      <Heart
+                        size={18}
+                        fill={favorites.has(photo.id) ? "currentColor" : "none"}
+                      />
+                    </button>
+                  </div>
                   <Image
                     src={photo.previewUrl}
                     alt={`Foto ${photo.name}`}
@@ -459,6 +646,24 @@ export function GalleryFinder({
                 </article>
               ))}
             </div>
+            <div ref={sentinel} className="load-sentinel" aria-hidden="true" />
+            {!busy && loadedCount < currentIds.length && (
+              <button
+                className="button secondary load-more"
+                onClick={() => {
+                  const next = currentIds.slice(
+                    loadedCount,
+                    loadedCount + PAGE_SIZE,
+                  );
+                  setLoadedCount((count) =>
+                    Math.min(count + PAGE_SIZE, currentIds.length),
+                  );
+                  void loadPhotos(next, true);
+                }}
+              >
+                Carregar mais fotos
+              </button>
+            )}
             <div className="result-actions">
               {mode === "matches" && (
                 <button
@@ -482,6 +687,36 @@ export function GalleryFinder({
           </>
         )}
       </section>
+      {selected.size > 0 && (
+        <aside className="selection-bar">
+          <span>
+            <strong>{selected.size}</strong>{" "}
+            {selected.size === 1 ? "foto selecionada" : "fotos selecionadas"}
+          </span>
+          <button
+            className="text-button"
+            onClick={() => setSelected(new Set())}
+          >
+            Limpar
+          </button>
+          <button className="button" disabled={busy} onClick={downloadZip}>
+            <Package size={18} />
+            {busy ? status : "Baixar ZIP"}
+          </button>
+        </aside>
+      )}
+      {data && (
+        <footer className="gallery-footer">
+          <span>
+            Galeria disponível até{" "}
+            {data.event.expires_at
+              ? new Date(data.event.expires_at).toLocaleDateString("pt-BR")
+              : "a data definida pelo organizador"}
+            .
+          </span>
+          <Link href="/privacidade">Privacidade e LGPD</Link>
+        </footer>
+      )}
     </main>
   );
 }

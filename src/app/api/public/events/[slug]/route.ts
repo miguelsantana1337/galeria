@@ -49,16 +49,14 @@ export async function GET(
           })
       : Promise.resolve({ data: null }),
     ...logoPaths.map((path) =>
-      admin.storage
-        .from("event-photos")
-        .createSignedUrl(path, 3600, {
-          transform: {
-            width: 280,
-            height: 160,
-            quality: 82,
-            resize: "contain",
-          },
-        }),
+      admin.storage.from("event-photos").createSignedUrl(path, 3600, {
+        transform: {
+          width: 280,
+          height: 160,
+          quality: 82,
+          resize: "contain",
+        },
+      }),
     ),
   ]);
   const publicEvent = {

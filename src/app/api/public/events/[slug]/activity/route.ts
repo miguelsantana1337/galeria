@@ -24,13 +24,11 @@ export async function POST(
     .eq("status", "published")
     .single();
   if (!event) return NextResponse.json({ ok: false }, { status: 404 });
-  await admin
-    .from("gallery_activity")
-    .insert({
-      event_id: event.id,
-      kind: parsed.data.kind,
-      photo_count: parsed.data.photoCount,
-    });
+  await admin.from("gallery_activity").insert({
+    event_id: event.id,
+    kind: parsed.data.kind,
+    photo_count: parsed.data.photoCount,
+  });
   if (parsed.data.consent)
     await admin
       .from("gallery_consents")

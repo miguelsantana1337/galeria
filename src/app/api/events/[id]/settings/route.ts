@@ -3,6 +3,8 @@ import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const schema = z.object({
+  name: z.string().trim().min(3).max(100),
+  event_date: z.union([z.string().date(), z.literal("")]).nullable(),
   description: z.string().max(800).nullable(),
   welcome_message: z.string().max(500).nullable(),
   brand_color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
@@ -46,6 +48,7 @@ export async function PATCH(
     );
   const values = {
     ...parsed.data,
+    event_date: parsed.data.event_date || null,
     description: parsed.data.description || null,
     whatsapp_url: parsed.data.whatsapp_url || null,
     instagram_url: parsed.data.instagram_url || null,

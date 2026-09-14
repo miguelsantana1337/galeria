@@ -35,30 +35,22 @@ export async function POST(
     .eq("status", "ready");
   const signed = await Promise.all(
     (photos || []).map(async (photo) => {
-      const [{ data: preview }, { data: original }] = await Promise.all([
-        admin.storage
-          .from("event-photos")
-          .createSignedUrl(photo.storage_path, 3600, {
-            transform: { width: 720, quality: 68, resize: "contain" },
-          }),
-        admin.storage
-          .from("event-photos")
-          .createSignedUrl(photo.storage_path, 3600, {
-            download: photo.original_name,
-          }),
-      ]);
+      const { data: preview } = await admin.storage
+        .from("event-photos")
+        .createSignedUrl(photo.storage_path, 3600, {
+          transform: { width: 720, quality: 68, resize: "contain" },
+        });
       return {
         id: photo.id,
         name: photo.original_name,
         width: photo.width,
         height: photo.height,
         previewUrl: preview?.signedUrl,
-        downloadUrl: original?.signedUrl,
       };
     }),
   );
   return NextResponse.json(
-    { photos: signed.filter((photo) => photo.previewUrl && photo.downloadUrl) },
+    { photos: signed.filter((photo) => photo.previewUrl) },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 }

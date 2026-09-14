@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
@@ -15,6 +16,10 @@ import {
   UploadCloud,
   ImagePlus,
   X,
+  QrCode,
+  MessageCircle,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
@@ -75,6 +80,7 @@ export function EventManager({
   initialPhotos: Photo[];
   metrics: Metrics;
 }) {
+  const router = useRouter();
   const [photos, setPhotos] = useState(initialPhotos),
     [queue, setQueue] = useState<QueueItem[]>([]),
     [busy, setBusy] = useState(false),
@@ -82,6 +88,8 @@ export function EventManager({
     [token, setToken] = useState(event.share_token),
     [notice, setNotice] = useState("");
   const [settings, setSettings] = useState({
+      name: event.name,
+      event_date: event.event_date || "",
       description: event.description || "",
       welcome_message: event.welcome_message || "",
       brand_color: event.brand_color || "#235c3a",
@@ -96,7 +104,8 @@ export function EventManager({
     [bannerPreview, setBannerPreview] = useState(event.banner_preview_url),
     [logoPreviews, setLogoPreviews] = useState<(string | null)[]>(
       event.logo_preview_urls,
-    );
+    ),
+    [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const publicUrl = useMemo(
     () =>
       `${typeof window === "undefined" ? "" : location.origin}/evento/${event.slug}?k=${token}`,
@@ -241,6 +250,33 @@ export function EventManager({
       });
     else await copyLink();
   }
+  async function showQrCode() {
+    const QRCode = (await import("qrcode")).default;
+    setQrDataUrl(
+      await QRCode.toDataURL(publicUrl, {
+        width: 720,
+        margin: 2,
+        color: { dark: "#17211A", light: "#FFFFFF" },
+      }),
+    );
+  }
+  async function deleteEvent() {
+    if (
+      !confirm(
+        `Excluir definitivamente ${event.name}, todas as fotos e métricas? Esta ação não pode ser desfeita.`,
+      )
+    )
+      return;
+    setSaving(true);
+    const response = await fetch(`/api/events/${event.id}`, {
+      method: "DELETE",
+    });
+    if (response.ok) router.push("/painel");
+    else {
+      setSaving(false);
+      setNotice((await response.json()).error);
+    }
+  }
   async function rotateLink() {
     if (!confirm("O link anterior deixará de funcionar. Deseja continuar?"))
       return;
@@ -326,6 +362,22 @@ export function EventManager({
     conversion = metrics.selfie
       ? Math.round((metrics.match / metrics.selfie) * 100)
       : 0;
+  const checklist = [
+    {
+      label: "Nome e data definidos",
+      done: Boolean(settings.name && settings.event_date),
+    },
+    {
+      label: "Descrição preenchida",
+      done: Boolean(settings.description.trim()),
+    },
+    { label: "Banner configurado", done: Boolean(settings.banner_path) },
+    { label: "Pelo menos uma foto", done: photos.length > 0 },
+    {
+      label: "Identidade dos organizadores",
+      done: settings.organizer_logos.length > 0,
+    },
+  ];
   return (
     <>
       <header className="topbar compact">
@@ -477,6 +529,24 @@ export function EventManager({
           )}
         </div>
         <aside className="stack">
+          <section className="panel stack publish-checklist">
+            <div>
+              <h2>Pronto para publicar?</h2>
+              <p className="muted">
+                Revise os itens essenciais da experiência.
+              </p>
+            </div>
+            {checklist.map((item) => (
+              <div key={item.label} className={item.done ? "done" : ""}>
+                {item.done ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                <span>{item.label}</span>
+              </div>
+            ))}
+            <small>
+              {checklist.filter((item) => item.done).length} de{" "}
+              {checklist.length} concluídos
+            </small>
+          </section>
           <section className="panel stack">
             <div>
               <h2>Compartilhamento</h2>
@@ -494,6 +564,35 @@ export function EventManager({
             <button className="button secondary" onClick={share}>
               <Share2 size={16} /> Compartilhar
             </button>
+            <a
+              className="button secondary"
+              href={`https://wa.me/?text=${encodeURIComponent(`${event.name}: ${publicUrl}`)}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <MessageCircle size={16} /> Enviar pelo WhatsApp
+            </a>
+            <button className="button secondary" onClick={showQrCode}>
+              <QrCode size={16} /> Gerar QR Code
+            </button>
+            {qrDataUrl && (
+              <div className="qr-card">
+                <Image
+                  src={qrDataUrl}
+                  alt={`QR Code de ${event.name}`}
+                  width={260}
+                  height={260}
+                  unoptimized
+                />
+                <a
+                  className="text-button"
+                  href={qrDataUrl}
+                  download={`qr-${event.slug}.png`}
+                >
+                  Baixar QR Code
+                </a>
+              </div>
+            )}
             <button className="button secondary" onClick={copyLink}>
               <Copy size={16} /> Copiar link
             </button>
@@ -517,6 +616,26 @@ export function EventManager({
                 Use os dados reais do evento. Campos sociais são opcionais.
               </p>
             </div>
+            <label className="field">
+              <span>Nome do evento</span>
+              <input
+                value={settings.name}
+                maxLength={100}
+                onChange={(e) =>
+                  setSettings({ ...settings, name: e.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Data do evento</span>
+              <input
+                type="date"
+                value={settings.event_date}
+                onChange={(e) =>
+                  setSettings({ ...settings, event_date: e.target.value })
+                }
+              />
+            </label>
             <div className="branding-editor">
               <div className="brand-upload-block">
                 <span className="field-label">Banner do evento</span>
@@ -697,6 +816,22 @@ export function EventManager({
               {metrics.consents} consentimentos registrados · {metrics.no_match}{" "}
               buscas sem resultado. Selfies nunca são armazenadas.
             </p>
+          </section>
+          <section className="panel stack danger-zone">
+            <div>
+              <h2>Excluir evento</h2>
+              <p className="muted">
+                Remove permanentemente fotos, descritores, métricas, banner e
+                logos.
+              </p>
+            </div>
+            <button
+              className="button danger-button"
+              disabled={saving}
+              onClick={deleteEvent}
+            >
+              <Trash2 size={16} /> Excluir permanentemente
+            </button>
           </section>
         </aside>
       </div>
