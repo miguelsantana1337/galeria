@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { EventsDashboard } from "@/components/events-dashboard";
+import { LogoutButton } from "@/components/logout-button";
 
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
@@ -39,7 +40,10 @@ export default async function DashboardPage() {
         <span className="brand">
           Minha Galeria<span className="brand-dot">.</span>
         </span>
-        <span>{user.email}</span>
+        <div className="account-menu">
+          <span>{user.email}</span>
+          <LogoutButton />
+        </div>
       </header>
       <header className="page-header">
         <span className="eyebrow">Seus eventos</span>
