@@ -890,6 +890,11 @@ h2 {
   font-weight: 750;
   text-decoration: none;
 }
+.mobile-save-icon,
+.mobile-save-label,
+.ios-save-note {
+  display: none;
+}
 .retry {
   margin: 0 auto;
   width: auto;
@@ -906,6 +911,24 @@ h2 {
   }
 }
 @media (max-width: 600px) {
+  .desktop-save-icon,
+  .desktop-save-label {
+    display: none;
+  }
+  .mobile-save-icon,
+  .mobile-save-label {
+    display: inline-flex;
+  }
+  .ios-save-note {
+    display: block;
+    margin: 0.85rem auto 0;
+    max-width: 34rem;
+    padding: 0 1rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    text-align: center;
+  }
   .event-form {
     display: grid;
     gap: 6px;

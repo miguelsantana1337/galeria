@@ -23,6 +23,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   RefreshCw,
+  Share2,
   Sparkles,
   Package,
 } from "lucide-react";
@@ -302,9 +303,35 @@ export function GalleryFinder({
   async function download(photo: ResultPhoto) {
     try {
       const file = await getDownload(photo.id);
+      const response = await fetch(file.url);
+      if (!response.ok) throw new Error("Não foi possível abrir esta foto.");
+      const blob = await response.blob();
+      const sharedFile = new File([blob], file.name, {
+        type: blob.type || "image/jpeg",
+      });
+
+      if (
+        typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [sharedFile] })
+      ) {
+        await navigator.share({
+          files: [sharedFile],
+          title: data?.event.name || "Minha Galeria",
+        });
+        void activity(slug, accessKey, "download", 1);
+        return;
+      }
+
       void activity(slug, accessKey, "download", 1);
-      window.location.href = file.url;
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = file.name;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(e instanceof Error ? e.message : "Download indisponível.");
     }
   }
@@ -641,11 +668,22 @@ export function GalleryFinder({
                     unoptimized
                   />
                   <button className="download" onClick={() => download(photo)}>
-                    <Download size={17} /> Baixar original
+                    <span className="mobile-save-icon">
+                      <Share2 size={17} />
+                    </span>
+                    <span className="desktop-save-icon">
+                      <Download size={17} />
+                    </span>
+                    <span className="mobile-save-label">Salvar foto</span>
+                    <span className="desktop-save-label">Baixar original</span>
                   </button>
                 </article>
               ))}
             </div>
+            <p className="ios-save-note">
+              No iPhone, toque em <strong>Salvar foto</strong> e escolha
+              <strong> Salvar Imagem</strong> para adicionar ao app Fotos.
+            </p>
             <div ref={sentinel} className="load-sentinel" aria-hidden="true" />
             {!busy && loadedCount < currentIds.length && (
               <button
