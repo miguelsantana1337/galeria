@@ -1,18 +1,302 @@
 "use client";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
-import { Camera, CheckCircle2, Download, ExternalLink, LoaderCircle, LockKeyhole, RefreshCw, Sparkles } from "lucide-react";
-import Image from "next/image"; import Link from "next/link";
+import {
+  Camera,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  LoaderCircle,
+  LockKeyhole,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 import { extractFaces, getFaceEngine } from "@/lib/face-engine";
 type FaceRecord = { photo_id: string; descriptor: number[] };
-type EventData = { event: { name: string; match_threshold: number; welcome_message: string | null; brand_color: string; whatsapp_url: string | null; instagram_url: string | null; expires_at: string | null }; faces: FaceRecord[] };
-type ResultPhoto = { id: string; name: string; width: number; height: number; url: string };
-function sendActivity(slug:string,accessKey:string,kind:string,photoCount?:number,accepted?:boolean){return fetch(`/api/public/events/${slug}/activity`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({key:accessKey,kind,photoCount,consent:accepted}),keepalive:true}).catch(()=>undefined);}
-export function GalleryFinder({ slug, accessKey }: { slug: string; accessKey: string }) {
- const [data,setData]=useState<EventData|null>(null),[status,setStatus]=useState("Preparando a galeria…"),[error,setError]=useState(accessKey?"":"Este link não possui a chave privada do evento. Peça o link completo ao fotógrafo."),[photos,setPhotos]=useState<ResultPhoto[]>([]),[busy,setBusy]=useState(false),[consent,setConsent]=useState(false); const announced=useRef(false);
- const activity=(kind:string,photoCount?:number,accepted?:boolean)=>sendActivity(slug,accessKey,kind,photoCount,accepted);
- useEffect(()=>{if(!accessKey)return;Promise.all([fetch(`/api/public/events/${slug}?k=${encodeURIComponent(accessKey)}`,{cache:"no-store"}).then(async r=>{if(!r.ok)throw new Error(r.status===410?"Esta galeria expirou. Fale com o fotógrafo.":"Esta galeria não está disponível ou o link está incompleto.");return r.json();}),getFaceEngine(setStatus)]).then(([eventData])=>{setData(eventData);setStatus("");if(!announced.current){announced.current=true;void sendActivity(slug,accessKey,"view");}}).catch(e=>setError(e.message));},[accessKey,slug]);
- async function find(e:ChangeEvent<HTMLInputElement>){const file=e.target.files?.[0];if(!file||!data||!consent)return;setBusy(true);setError("");setPhotos([]);void activity("selfie",undefined,true);try{setStatus("Lendo seu rosto…");const analysis=await extractFaces(file,1);if(analysis.faces.length!==1)throw new Error("Não encontrei um rosto nítido. Use uma foto frontal, bem iluminada e sem outras pessoas.");setStatus("Procurando você nas fotos…");const human=await getFaceEngine(),query=analysis.faces[0].descriptor;const photoIds=[...new Set(data.faces.filter(face=>human.match.similarity(query,face.descriptor)>=data.event.match_threshold).map(face=>face.photo_id))];if(!photoIds.length){void activity("no_match");throw new Error("Não encontramos você com segurança. Tente outra selfie frontal, com boa luz e sem óculos escuros.");}const response=await fetch(`/api/public/events/${slug}/photos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({key:accessKey,photoIds})});if(!response.ok)throw new Error("Não foi possível carregar as fotos encontradas.");const found=(await response.json()).photos;setPhotos(found);setStatus("");void activity("match",found.length);}catch(e){setError(e instanceof Error?e.message:"Não foi possível analisar a selfie.");setStatus("");}finally{setBusy(false);e.target.value="";}}
- function download(photo:ResultPhoto){void activity("download",1);window.open(photo.url,"_blank","noopener,noreferrer");}
- if(error&&!data)return <main className="finder-shell"><div className="finder-card"><span className="brand">Fotos do Santana<span className="brand-dot">.</span></span><h1>Galeria indisponível.</h1><p className="lead">{error}</p><Link className="button inline-button" href="/">Voltar ao início</Link></div></main>;
- return <main className="finder-shell" style={{"--event-color":data?.event.brand_color||"#235c3a"} as React.CSSProperties}><header className="finder-top"><Link className="brand" href="/">Fotos do Santana<span className="brand-dot">.</span></Link><span className="privacy"><LockKeyhole size={14}/> Selfie não armazenada</span></header><section className="finder-card">{!photos.length?<><span className="eyebrow"><Sparkles size={14}/> {data?.event.name||"Seu evento"}</span><h1>Você está em quais momentos?</h1><p className="lead">{data?.event.welcome_message||"Use uma selfie frontal, com boa luz e somente você. A foto é analisada neste aparelho e não é enviada nem armazenada."}</p><div className="selfie-guide"><span><CheckCircle2 size={16}/> Olhe para a câmera</span><span><CheckCircle2 size={16}/> Use boa iluminação</span><span><CheckCircle2 size={16}/> Apareça sozinho</span></div><label className="consent"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/><span>Autorizo o uso do reconhecimento facial apenas para localizar minhas fotos neste evento.</span></label><label className={`selfie-button ${busy||!data||!consent?"disabled":""}`}><Camera size={22}/>{busy?status:status||"Escolher ou tirar selfie"}<input hidden type="file" accept="image/*" capture="user" disabled={busy||!data||!consent} onChange={find}/></label><p className="privacy-note">O consentimento é registrado sem guardar a selfie ou identificar você.</p>{busy&&<LoaderCircle className="spin finder-loader"/>}{error&&<p className="error" role="alert">{error}</p>}</>:<><span className="eyebrow">Suas fotos</span><h1>Encontramos {photos.length}.</h1><p className="lead">Abra cada foto em alta resolução e salve no seu aparelho.</p><div className="photo-grid">{photos.map(photo=><article key={photo.id} className="photo-card"><Image src={photo.url} alt={`Foto ${photo.name}`} width={photo.width||1200} height={photo.height||900} unoptimized/><button className="download" onClick={()=>download(photo)}><Download size={17}/> Baixar foto</button></article>)}</div><div className="result-actions"><button className="button secondary retry" onClick={()=>{setPhotos([]);setError("");}}><RefreshCw size={16}/> Tentar outra selfie</button>{data?.event.whatsapp_url&&<a className="button secondary inline-button" href={data.event.whatsapp_url} target="_blank" rel="noreferrer">Falar com o fotógrafo <ExternalLink size={15}/></a>}</div></>}</section></main>;
+type EventData = {
+  event: {
+    name: string;
+    match_threshold: number;
+    welcome_message: string | null;
+    brand_color: string;
+    whatsapp_url: string | null;
+    instagram_url: string | null;
+    expires_at: string | null;
+  };
+  faces: FaceRecord[];
+};
+type ResultPhoto = {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  previewUrl: string;
+  downloadUrl: string;
+};
+function sendActivity(
+  slug: string,
+  accessKey: string,
+  kind: string,
+  photoCount?: number,
+  accepted?: boolean,
+) {
+  return fetch(`/api/public/events/${slug}/activity`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      key: accessKey,
+      kind,
+      photoCount,
+      consent: accepted,
+    }),
+    keepalive: true,
+  }).catch(() => undefined);
+}
+export function GalleryFinder({
+  slug,
+  accessKey,
+}: {
+  slug: string;
+  accessKey: string;
+}) {
+  const [data, setData] = useState<EventData | null>(null),
+    [status, setStatus] = useState("Preparando a galeria…"),
+    [error, setError] = useState(
+      accessKey
+        ? ""
+        : "Este link não possui a chave privada do evento. Peça o link completo ao fotógrafo.",
+    ),
+    [photos, setPhotos] = useState<ResultPhoto[]>([]),
+    [busy, setBusy] = useState(false),
+    [consent, setConsent] = useState(false);
+  const announced = useRef(false);
+  const activity = (kind: string, photoCount?: number, accepted?: boolean) =>
+    sendActivity(slug, accessKey, kind, photoCount, accepted);
+  useEffect(() => {
+    if (!accessKey) return;
+    Promise.all([
+      fetch(`/api/public/events/${slug}?k=${encodeURIComponent(accessKey)}`, {
+        cache: "no-store",
+      }).then(async (r) => {
+        if (!r.ok)
+          throw new Error(
+            r.status === 410
+              ? "Esta galeria expirou. Fale com o fotógrafo."
+              : "Esta galeria não está disponível ou o link está incompleto.",
+          );
+        return r.json();
+      }),
+      getFaceEngine(setStatus),
+    ])
+      .then(([eventData]) => {
+        setData(eventData);
+        setStatus("");
+        if (!announced.current) {
+          announced.current = true;
+          void sendActivity(slug, accessKey, "view");
+        }
+      })
+      .catch((e) => setError(e.message));
+  }, [accessKey, slug]);
+  async function find(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !data || !consent) return;
+    setBusy(true);
+    setError("");
+    setPhotos([]);
+    void activity("selfie", undefined, true);
+    try {
+      setStatus("Lendo seu rosto…");
+      const analysis = await extractFaces(file, 1);
+      if (analysis.faces.length !== 1)
+        throw new Error(
+          "Não encontrei um rosto nítido. Use uma foto frontal, bem iluminada e sem outras pessoas.",
+        );
+      setStatus("Procurando você nas fotos…");
+      const human = await getFaceEngine(),
+        query = analysis.faces[0].descriptor;
+      const photoIds = [
+        ...new Set(
+          data.faces
+            .filter(
+              (face) =>
+                human.match.similarity(query, face.descriptor) >=
+                data.event.match_threshold,
+            )
+            .map((face) => face.photo_id),
+        ),
+      ];
+      if (!photoIds.length) {
+        void activity("no_match");
+        throw new Error(
+          "Não encontramos você com segurança. Tente outra selfie frontal, com boa luz e sem óculos escuros.",
+        );
+      }
+      const response = await fetch(`/api/public/events/${slug}/photos`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: accessKey, photoIds }),
+      });
+      if (!response.ok)
+        throw new Error("Não foi possível carregar as fotos encontradas.");
+      const found = (await response.json()).photos;
+      setPhotos(found);
+      setStatus("");
+      void activity("match", found.length);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Não foi possível analisar a selfie.",
+      );
+      setStatus("");
+    } finally {
+      setBusy(false);
+      e.target.value = "";
+    }
+  }
+  function download(photo: ResultPhoto) {
+    void activity("download", 1);
+    window.open(photo.downloadUrl, "_blank", "noopener,noreferrer");
+  }
+  if (error && !data)
+    return (
+      <main className="finder-shell">
+        <div className="finder-card">
+          <span className="brand">
+            Fotos do Santana<span className="brand-dot">.</span>
+          </span>
+          <h1>Galeria indisponível.</h1>
+          <p className="lead">{error}</p>
+          <Link className="button inline-button" href="/">
+            Voltar ao início
+          </Link>
+        </div>
+      </main>
+    );
+  return (
+    <main
+      className="finder-shell"
+      style={
+        {
+          "--event-color": data?.event.brand_color || "#235c3a",
+        } as React.CSSProperties
+      }
+    >
+      <header className="finder-top">
+        <Link className="brand" href="/">
+          Fotos do Santana<span className="brand-dot">.</span>
+        </Link>
+        <span className="privacy">
+          <LockKeyhole size={14} /> Selfie não armazenada
+        </span>
+      </header>
+      <section className="finder-card">
+        {!photos.length ? (
+          <>
+            <span className="eyebrow">
+              <Sparkles size={14} /> {data?.event.name || "Seu evento"}
+            </span>
+            <h1>Você está em quais momentos?</h1>
+            <p className="lead">
+              {data?.event.welcome_message ||
+                "Use uma selfie frontal, com boa luz e somente você. A foto é analisada neste aparelho e não é enviada nem armazenada."}
+            </p>
+            <div className="selfie-guide">
+              <span>
+                <CheckCircle2 size={16} /> Olhe para a câmera
+              </span>
+              <span>
+                <CheckCircle2 size={16} /> Use boa iluminação
+              </span>
+              <span>
+                <CheckCircle2 size={16} /> Apareça sozinho
+              </span>
+            </div>
+            <label className="consent">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+              />
+              <span>
+                Autorizo o uso do reconhecimento facial apenas para localizar
+                minhas fotos neste evento.
+              </span>
+            </label>
+            <label
+              className={`selfie-button ${busy || !data || !consent ? "disabled" : ""}`}
+            >
+              <Camera size={22} />
+              {busy ? status : status || "Escolher ou tirar selfie"}
+              <input
+                hidden
+                type="file"
+                accept="image/*"
+                capture="user"
+                disabled={busy || !data || !consent}
+                onChange={find}
+              />
+            </label>
+            <p className="privacy-note">
+              O consentimento é registrado sem guardar a selfie ou identificar
+              você.
+            </p>
+            {busy && <LoaderCircle className="spin finder-loader" />}
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="eyebrow">Suas fotos</span>
+            <h1>Encontramos {photos.length}.</h1>
+            <p className="lead">
+              Abra cada foto em alta resolução e salve no seu aparelho.
+            </p>
+            <div className="photo-grid">
+              {photos.map((photo) => (
+                <article key={photo.id} className="photo-card">
+                  <Image
+                    src={photo.previewUrl}
+                    alt={`Foto ${photo.name}`}
+                    width={720}
+                    height={540}
+                    loading="lazy"
+                    sizes="(max-width: 600px) 100vw, (max-width: 820px) 50vw, 33vw"
+                    unoptimized
+                  />
+                  <button className="download" onClick={() => download(photo)}>
+                    <Download size={17} /> Baixar foto
+                  </button>
+                </article>
+              ))}
+            </div>
+            <div className="result-actions">
+              <button
+                className="button secondary retry"
+                onClick={() => {
+                  setPhotos([]);
+                  setError("");
+                }}
+              >
+                <RefreshCw size={16} /> Tentar outra selfie
+              </button>
+              {data?.event.whatsapp_url && (
+                <a
+                  className="button secondary inline-button"
+                  href={data.event.whatsapp_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Falar com o fotógrafo <ExternalLink size={15} />
+                </a>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+    </main>
+  );
 }

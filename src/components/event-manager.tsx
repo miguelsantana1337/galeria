@@ -1,28 +1,540 @@
 "use client";
 import Image from "next/image";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
-import { BarChart3, Check, Copy, ExternalLink, Images, LoaderCircle, RefreshCw, Save, Share2, Trash2, UploadCloud } from "lucide-react";
+import {
+  BarChart3,
+  Check,
+  Copy,
+  ExternalLink,
+  Images,
+  LoaderCircle,
+  RefreshCw,
+  Save,
+  Share2,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { extractFaces, getFaceEngine } from "@/lib/face-engine";
 
-type EventInfo={id:string;name:string;slug:string;status:string;photo_count:number;event_date:string|null;share_token:string;welcome_message:string|null;brand_color:string;whatsapp_url:string|null;instagram_url:string|null;expires_at:string|null;retention_days:number};
-type Photo={id:string;original_name:string;face_count:number;status:string;storage_path:string;preview_url:string|null};
-type Metrics={view:number;selfie:number;match:number;no_match:number;download:number;downloadedPhotos:number;consents:number};
-type QueueItem={file:File;status:"waiting"|"processing"|"done"|"error";message?:string};
+type EventInfo = {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  photo_count: number;
+  event_date: string | null;
+  share_token: string;
+  welcome_message: string | null;
+  brand_color: string;
+  whatsapp_url: string | null;
+  instagram_url: string | null;
+  expires_at: string | null;
+  retention_days: number;
+};
+type Photo = {
+  id: string;
+  original_name: string;
+  face_count: number;
+  status: string;
+  storage_path: string;
+  preview_url: string | null;
+};
+type Metrics = {
+  view: number;
+  selfie: number;
+  match: number;
+  no_match: number;
+  download: number;
+  downloadedPhotos: number;
+  consents: number;
+};
+type QueueItem = {
+  file: File;
+  status: "waiting" | "processing" | "done" | "error";
+  message?: string;
+};
 
-export function EventManager({event,initialPhotos,metrics}:{event:EventInfo;initialPhotos:Photo[];metrics:Metrics}){
- const [photos,setPhotos]=useState(initialPhotos),[queue,setQueue]=useState<QueueItem[]>([]),[busy,setBusy]=useState(false),[published,setPublished]=useState(event.status==="published"),[token,setToken]=useState(event.share_token),[notice,setNotice]=useState("");
- const [settings,setSettings]=useState({welcome_message:event.welcome_message||"",brand_color:event.brand_color||"#235c3a",whatsapp_url:event.whatsapp_url||"",instagram_url:event.instagram_url||"",retention_days:event.retention_days||30}),[saving,setSaving]=useState(false),[expiresAt,setExpiresAt]=useState(event.expires_at);
- const publicUrl=useMemo(()=>`${typeof window==="undefined"?"":location.origin}/evento/${event.slug}?k=${token}`,[event.slug,token]);
- useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(busy)e.preventDefault();};window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);},[busy]);
- async function upload(selected:File[]){setBusy(true);setQueue(selected.map(file=>({file,status:"waiting"})));try{await getFaceEngine();const supabase=createSupabaseBrowserClient();for(let index=0;index<selected.length;index++){const file=selected[index];setQueue(old=>old.map((item,i)=>i===index?{...item,status:"processing",message:"Identificando rostos…"}:item));try{const analysis=await extractFaces(file),safeName=`${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"-")}`,path=`${event.id}/${safeName}`;setQueue(old=>old.map((item,i)=>i===index?{...item,message:`${analysis.faces.length} rosto(s) · enviando…`}:item));const {error:uploadError}=await supabase.storage.from("event-photos").upload(path,file,{contentType:file.type,upsert:false});if(uploadError)throw uploadError;const response=await fetch(`/api/events/${event.id}/photos`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({storagePath:path,originalName:file.name,width:analysis.width,height:analysis.height,faces:analysis.faces})});if(!response.ok){await supabase.storage.from("event-photos").remove([path]);throw new Error((await response.json()).error);}const result=await response.json();setPhotos(old=>[...old,{id:result.id,original_name:file.name,face_count:analysis.faces.length,status:"ready",storage_path:path,preview_url:URL.createObjectURL(file)}]);setQueue(old=>old.map((item,i)=>i===index?{...item,status:"done",message:`${analysis.faces.length} rosto(s) indexado(s)`}:item));}catch(error){setQueue(old=>old.map((item,i)=>i===index?{...item,status:"error",message:error instanceof Error?error.message:"Falha no processamento"}:item));}}}finally{setBusy(false);}}
- async function chooseFiles(e:ChangeEvent<HTMLInputElement>){const files=Array.from(e.target.files||[]).filter(file=>file.type.startsWith("image/")&&file.size<=15*1024*1024);if(files.length)await upload(files);e.target.value="";}
- async function togglePublish(){const response=await fetch(`/api/events/${event.id}/publish`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({publish:!published})});if(response.ok){setPublished(!published);setNotice(!published?"Galeria publicada.":"Galeria pausada.");}}
- async function copyLink(){await navigator.clipboard.writeText(publicUrl);setNotice("Link privado copiado.");}
- async function share(){if(navigator.share)await navigator.share({title:event.name,text:`Suas fotos de ${event.name}`,url:publicUrl});else await copyLink();}
- async function rotateLink(){if(!confirm("O link anterior deixará de funcionar. Deseja continuar?"))return;const response=await fetch(`/api/events/${event.id}/rotate-link`,{method:"POST"}),body=await response.json();if(response.ok){setToken(body.token);setNotice("Novo link privado criado.");}else setNotice(body.error);}
- async function saveSettings(){setSaving(true);const response=await fetch(`/api/events/${event.id}/settings`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(settings)}),body=await response.json();setSaving(false);if(response.ok){setExpiresAt(body.expires_at);setNotice("Configurações salvas.");}else setNotice(body.error);}
- async function removePhoto(photo:Photo){if(!confirm(`Excluir ${photo.original_name}?`))return;const response=await fetch(`/api/events/${event.id}/photos`,{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({photoId:photo.id})});if(response.ok)setPhotos(old=>old.filter(item=>item.id!==photo.id));else setNotice((await response.json()).error);}
- const failed=queue.filter(item=>item.status==="error").map(item=>item.file),faces=photos.reduce((sum,p)=>sum+p.face_count,0),conversion=metrics.selfie?Math.round(metrics.match/metrics.selfie*100):0;
- return <><header className="topbar compact"><a className="brand" href="/painel">Fotos do Santana<span className="brand-dot">.</span></a><span className={`status ${published?"live":""}`}>{published?"Publicado":"Rascunho"}</span></header><header className="page-header"><span className="eyebrow">{event.event_date?new Date(`${event.event_date}T12:00:00`).toLocaleDateString("pt-BR"):"Evento"}</span><h1>{event.name}</h1><p className="lead align-left">{photos.length} fotos · {faces} rostos encontrados</p></header>{notice&&<p className="notice" role="status">{notice}</p>}<section className="metric-grid"><div><strong>{metrics.view}</strong><span>visitas</span></div><div><strong>{metrics.selfie}</strong><span>selfies</span></div><div><strong>{metrics.match}</strong><span>resultados</span></div><div><strong>{conversion}%</strong><span>conversão</span></div><div><strong>{metrics.downloadedPhotos}</strong><span>downloads</span></div></section><div className="dashboard-grid"><div className="stack"><section className="panel stack"><div><h2>Fotos do evento</h2><p className="muted">Análise facial local, envio seguro e fila com nova tentativa.</p></div><label className={`dropzone ${busy?"disabled":""}`}><UploadCloud size={30}/><strong>{busy?"Processando fotos…":"Selecionar fotos"}</strong><span>JPEG, PNG ou WebP · até 15 MB cada</span><input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={chooseFiles} disabled={busy} hidden/></label>{queue.length>0&&<div className="queue" aria-live="polite">{queue.map((item,i)=><div className={`queue-row ${item.status}`} key={`${item.file.name}-${i}`}>{item.status==="processing"?<LoaderCircle className="spin" size={18}/>:item.status==="done"?<Check size={18}/>:<Images size={18}/>}<div><strong>{item.file.name}</strong><small>{item.message||"Na fila"}</small></div></div>)}{failed.length>0&&!busy&&<button className="button secondary" onClick={()=>upload(failed)}><RefreshCw size={16}/> Tentar falhas novamente</button>}</div>}</section>{photos.length>0&&<section className="panel stack"><div><h2>Revisão das fotos</h2><p className="muted">Confira miniaturas e remova arquivos incorretos antes de publicar.</p></div><div className="admin-photo-grid">{photos.map(photo=><article key={photo.id}>{photo.preview_url?<Image src={photo.preview_url} alt={photo.original_name} width={260} height={180} unoptimized/>:<div className="preview-placeholder"><Images/></div>}<div><span><strong>{photo.original_name}</strong><small>{photo.face_count} rosto(s)</small></span><button aria-label={`Excluir ${photo.original_name}`} onClick={()=>removePhoto(photo)}><Trash2 size={16}/></button></div></article>)}</div></section>}</div><aside className="stack"><section className="panel stack"><div><h2>Compartilhamento</h2><p className="muted">Somente quem recebe o link privado consegue abrir a galeria.</p></div><button className="button" disabled={!photos.length} onClick={togglePublish}>{published?"Pausar galeria":"Publicar galeria"}</button><button className="button secondary" onClick={share}><Share2 size={16}/> Compartilhar</button><button className="button secondary" onClick={copyLink}><Copy size={16}/> Copiar link</button><a className="button secondary" href={publicUrl} target="_blank" rel="noreferrer"><ExternalLink size={16}/> Abrir galeria</a><code className="event-link">{publicUrl}</code><button className="text-button" onClick={rotateLink}>Gerar um novo link privado</button></section><section className="panel stack"><div><h2>Personalização</h2><p className="muted">Use os dados reais do evento. Campos sociais são opcionais.</p></div><label className="field"><span>Mensagem de boas-vindas</span><textarea value={settings.welcome_message} maxLength={500} onChange={e=>setSettings({...settings,welcome_message:e.target.value})}/></label><label className="field"><span>Cor do evento</span><input type="color" value={settings.brand_color} onChange={e=>setSettings({...settings,brand_color:e.target.value})}/></label><label className="field"><span>WhatsApp (URL completa)</span><input type="url" placeholder="https://wa.me/55…" value={settings.whatsapp_url} onChange={e=>setSettings({...settings,whatsapp_url:e.target.value})}/></label><label className="field"><span>Instagram (URL completa)</span><input type="url" placeholder="https://instagram.com/…" value={settings.instagram_url} onChange={e=>setSettings({...settings,instagram_url:e.target.value})}/></label><label className="field"><span>Galeria disponível por</span><select value={settings.retention_days} onChange={e=>setSettings({...settings,retention_days:Number(e.target.value)})}><option value={7}>7 dias</option><option value={30}>30 dias</option><option value={60}>60 dias</option><option value={90}>90 dias</option><option value={180}>180 dias</option><option value={365}>1 ano</option></select></label><button className="button" onClick={saveSettings} disabled={saving}><Save size={16}/>{saving?"Salvando…":"Salvar configurações"}</button>{expiresAt&&<small className="muted">Expira em {new Date(expiresAt).toLocaleDateString("pt-BR")}</small>}</section><section className="panel stack compact-panel"><h2><BarChart3 size={20}/> Privacidade</h2><p className="muted">{metrics.consents} consentimentos registrados · {metrics.no_match} buscas sem resultado. Selfies nunca são armazenadas.</p></section></aside></div></>;
+export function EventManager({
+  event,
+  initialPhotos,
+  metrics,
+}: {
+  event: EventInfo;
+  initialPhotos: Photo[];
+  metrics: Metrics;
+}) {
+  const [photos, setPhotos] = useState(initialPhotos),
+    [queue, setQueue] = useState<QueueItem[]>([]),
+    [busy, setBusy] = useState(false),
+    [published, setPublished] = useState(event.status === "published"),
+    [token, setToken] = useState(event.share_token),
+    [notice, setNotice] = useState("");
+  const [settings, setSettings] = useState({
+      welcome_message: event.welcome_message || "",
+      brand_color: event.brand_color || "#235c3a",
+      whatsapp_url: event.whatsapp_url || "",
+      instagram_url: event.instagram_url || "",
+      retention_days: event.retention_days || 30,
+    }),
+    [saving, setSaving] = useState(false),
+    [expiresAt, setExpiresAt] = useState(event.expires_at);
+  const publicUrl = useMemo(
+    () =>
+      `${typeof window === "undefined" ? "" : location.origin}/evento/${event.slug}?k=${token}`,
+    [event.slug, token],
+  );
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (busy) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [busy]);
+  async function upload(selected: File[]) {
+    setBusy(true);
+    setQueue(selected.map((file) => ({ file, status: "waiting" })));
+    try {
+      await getFaceEngine();
+      const supabase = createSupabaseBrowserClient();
+      for (let index = 0; index < selected.length; index++) {
+        const file = selected[index];
+        setQueue((old) =>
+          old.map((item, i) =>
+            i === index
+              ? {
+                  ...item,
+                  status: "processing",
+                  message: "Identificando rostos…",
+                }
+              : item,
+          ),
+        );
+        try {
+          const analysis = await extractFaces(file),
+            safeName = `${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`,
+            path = `${event.id}/${safeName}`;
+          setQueue((old) =>
+            old.map((item, i) =>
+              i === index
+                ? {
+                    ...item,
+                    message: `${analysis.faces.length} rosto(s) · enviando…`,
+                  }
+                : item,
+            ),
+          );
+          const { error: uploadError } = await supabase.storage
+            .from("event-photos")
+            .upload(path, file, { contentType: file.type, upsert: false });
+          if (uploadError) throw uploadError;
+          const response = await fetch(`/api/events/${event.id}/photos`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              storagePath: path,
+              originalName: file.name,
+              width: analysis.width,
+              height: analysis.height,
+              faces: analysis.faces,
+            }),
+          });
+          if (!response.ok) {
+            await supabase.storage.from("event-photos").remove([path]);
+            throw new Error((await response.json()).error);
+          }
+          const result = await response.json();
+          setPhotos((old) => [
+            ...old,
+            {
+              id: result.id,
+              original_name: file.name,
+              face_count: analysis.faces.length,
+              status: "ready",
+              storage_path: path,
+              preview_url: URL.createObjectURL(file),
+            },
+          ]);
+          setQueue((old) =>
+            old.map((item, i) =>
+              i === index
+                ? {
+                    ...item,
+                    status: "done",
+                    message: `${analysis.faces.length} rosto(s) indexado(s)`,
+                  }
+                : item,
+            ),
+          );
+        } catch (error) {
+          setQueue((old) =>
+            old.map((item, i) =>
+              i === index
+                ? {
+                    ...item,
+                    status: "error",
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Falha no processamento",
+                  }
+                : item,
+            ),
+          );
+        }
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function chooseFiles(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []).filter(
+      (file) => file.type.startsWith("image/") && file.size <= 15 * 1024 * 1024,
+    );
+    if (files.length) await upload(files);
+    e.target.value = "";
+  }
+  async function togglePublish() {
+    const response = await fetch(`/api/events/${event.id}/publish`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ publish: !published }),
+    });
+    if (response.ok) {
+      setPublished(!published);
+      setNotice(!published ? "Galeria publicada." : "Galeria pausada.");
+    }
+  }
+  async function copyLink() {
+    await navigator.clipboard.writeText(publicUrl);
+    setNotice("Link privado copiado.");
+  }
+  async function share() {
+    if (navigator.share)
+      await navigator.share({
+        title: event.name,
+        text: `Suas fotos de ${event.name}`,
+        url: publicUrl,
+      });
+    else await copyLink();
+  }
+  async function rotateLink() {
+    if (!confirm("O link anterior deixará de funcionar. Deseja continuar?"))
+      return;
+    const response = await fetch(`/api/events/${event.id}/rotate-link`, {
+        method: "POST",
+      }),
+      body = await response.json();
+    if (response.ok) {
+      setToken(body.token);
+      setNotice("Novo link privado criado.");
+    } else setNotice(body.error);
+  }
+  async function saveSettings() {
+    setSaving(true);
+    const response = await fetch(`/api/events/${event.id}/settings`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(settings),
+      }),
+      body = await response.json();
+    setSaving(false);
+    if (response.ok) {
+      setExpiresAt(body.expires_at);
+      setNotice("Configurações salvas.");
+    } else setNotice(body.error);
+  }
+  async function removePhoto(photo: Photo) {
+    if (!confirm(`Excluir ${photo.original_name}?`)) return;
+    const response = await fetch(`/api/events/${event.id}/photos`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ photoId: photo.id }),
+    });
+    if (response.ok)
+      setPhotos((old) => old.filter((item) => item.id !== photo.id));
+    else setNotice((await response.json()).error);
+  }
+  const failed = queue
+      .filter((item) => item.status === "error")
+      .map((item) => item.file),
+    faces = photos.reduce((sum, p) => sum + p.face_count, 0),
+    conversion = metrics.selfie
+      ? Math.round((metrics.match / metrics.selfie) * 100)
+      : 0;
+  return (
+    <>
+      <header className="topbar compact">
+        <a className="brand" href="/painel">
+          Fotos do Santana<span className="brand-dot">.</span>
+        </a>
+        <span className={`status ${published ? "live" : ""}`}>
+          {published ? "Publicado" : "Rascunho"}
+        </span>
+      </header>
+      <header className="page-header">
+        <span className="eyebrow">
+          {event.event_date
+            ? new Date(`${event.event_date}T12:00:00`).toLocaleDateString(
+                "pt-BR",
+              )
+            : "Evento"}
+        </span>
+        <h1>{event.name}</h1>
+        <p className="lead align-left">
+          {photos.length} fotos · {faces} rostos encontrados
+        </p>
+      </header>
+      {notice && (
+        <p className="notice" role="status">
+          {notice}
+        </p>
+      )}
+      <section className="metric-grid">
+        <div>
+          <strong>{metrics.view}</strong>
+          <span>visitas</span>
+        </div>
+        <div>
+          <strong>{metrics.selfie}</strong>
+          <span>selfies</span>
+        </div>
+        <div>
+          <strong>{metrics.match}</strong>
+          <span>resultados</span>
+        </div>
+        <div>
+          <strong>{conversion}%</strong>
+          <span>conversão</span>
+        </div>
+        <div>
+          <strong>{metrics.downloadedPhotos}</strong>
+          <span>downloads</span>
+        </div>
+      </section>
+      <div className="dashboard-grid">
+        <div className="stack">
+          <section className="panel stack">
+            <div>
+              <h2>Fotos do evento</h2>
+              <p className="muted">
+                Análise facial local, envio seguro e fila com nova tentativa.
+              </p>
+            </div>
+            <label className={`dropzone ${busy ? "disabled" : ""}`}>
+              <UploadCloud size={30} />
+              <strong>
+                {busy ? "Processando fotos…" : "Selecionar fotos"}
+              </strong>
+              <span>JPEG, PNG ou WebP · até 15 MB cada</span>
+              <input
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp"
+                onChange={chooseFiles}
+                disabled={busy}
+                hidden
+              />
+            </label>
+            {queue.length > 0 && (
+              <div className="queue" aria-live="polite">
+                {queue.map((item, i) => (
+                  <div
+                    className={`queue-row ${item.status}`}
+                    key={`${item.file.name}-${i}`}
+                  >
+                    {item.status === "processing" ? (
+                      <LoaderCircle className="spin" size={18} />
+                    ) : item.status === "done" ? (
+                      <Check size={18} />
+                    ) : (
+                      <Images size={18} />
+                    )}
+                    <div>
+                      <strong>{item.file.name}</strong>
+                      <small>{item.message || "Na fila"}</small>
+                    </div>
+                  </div>
+                ))}
+                {failed.length > 0 && !busy && (
+                  <button
+                    className="button secondary"
+                    onClick={() => upload(failed)}
+                  >
+                    <RefreshCw size={16} /> Tentar falhas novamente
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+          {photos.length > 0 && (
+            <section className="panel stack">
+              <div>
+                <h2>Revisão das fotos</h2>
+                <p className="muted">
+                  Confira miniaturas e remova arquivos incorretos antes de
+                  publicar.
+                </p>
+              </div>
+              <div className="admin-photo-grid">
+                {photos.map((photo) => (
+                  <article key={photo.id}>
+                    {photo.preview_url ? (
+                    <Image
+                      src={photo.preview_url}
+                      alt={photo.original_name}
+                      width={260}
+                      height={180}
+                      loading="lazy"
+                      sizes="(max-width: 600px) 50vw, 260px"
+                      unoptimized
+                    />
+                    ) : (
+                      <div className="preview-placeholder">
+                        <Images />
+                      </div>
+                    )}
+                    <div>
+                      <span>
+                        <strong>{photo.original_name}</strong>
+                        <small>{photo.face_count} rosto(s)</small>
+                      </span>
+                      <button
+                        aria-label={`Excluir ${photo.original_name}`}
+                        onClick={() => removePhoto(photo)}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+        <aside className="stack">
+          <section className="panel stack">
+            <div>
+              <h2>Compartilhamento</h2>
+              <p className="muted">
+                Somente quem recebe o link privado consegue abrir a galeria.
+              </p>
+            </div>
+            <button
+              className="button"
+              disabled={!photos.length}
+              onClick={togglePublish}
+            >
+              {published ? "Pausar galeria" : "Publicar galeria"}
+            </button>
+            <button className="button secondary" onClick={share}>
+              <Share2 size={16} /> Compartilhar
+            </button>
+            <button className="button secondary" onClick={copyLink}>
+              <Copy size={16} /> Copiar link
+            </button>
+            <a
+              className="button secondary"
+              href={publicUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink size={16} /> Abrir galeria
+            </a>
+            <code className="event-link">{publicUrl}</code>
+            <button className="text-button" onClick={rotateLink}>
+              Gerar um novo link privado
+            </button>
+          </section>
+          <section className="panel stack">
+            <div>
+              <h2>Personalização</h2>
+              <p className="muted">
+                Use os dados reais do evento. Campos sociais são opcionais.
+              </p>
+            </div>
+            <label className="field">
+              <span>Mensagem de boas-vindas</span>
+              <textarea
+                value={settings.welcome_message}
+                maxLength={500}
+                onChange={(e) =>
+                  setSettings({ ...settings, welcome_message: e.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Cor do evento</span>
+              <input
+                type="color"
+                value={settings.brand_color}
+                onChange={(e) =>
+                  setSettings({ ...settings, brand_color: e.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>WhatsApp (URL completa)</span>
+              <input
+                type="url"
+                placeholder="https://wa.me/55…"
+                value={settings.whatsapp_url}
+                onChange={(e) =>
+                  setSettings({ ...settings, whatsapp_url: e.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Instagram (URL completa)</span>
+              <input
+                type="url"
+                placeholder="https://instagram.com/…"
+                value={settings.instagram_url}
+                onChange={(e) =>
+                  setSettings({ ...settings, instagram_url: e.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Galeria disponível por</span>
+              <select
+                value={settings.retention_days}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    retention_days: Number(e.target.value),
+                  })
+                }
+              >
+                <option value={7}>7 dias</option>
+                <option value={30}>30 dias</option>
+                <option value={60}>60 dias</option>
+                <option value={90}>90 dias</option>
+                <option value={180}>180 dias</option>
+                <option value={365}>1 ano</option>
+              </select>
+            </label>
+            <button className="button" onClick={saveSettings} disabled={saving}>
+              <Save size={16} />
+              {saving ? "Salvando…" : "Salvar configurações"}
+            </button>
+            {expiresAt && (
+              <small className="muted">
+                Expira em {new Date(expiresAt).toLocaleDateString("pt-BR")}
+              </small>
+            )}
+          </section>
+          <section className="panel stack compact-panel">
+            <h2>
+              <BarChart3 size={20} /> Privacidade
+            </h2>
+            <p className="muted">
+              {metrics.consents} consentimentos registrados · {metrics.no_match}{" "}
+              buscas sem resultado. Selfies nunca são armazenadas.
+            </p>
+          </section>
+        </aside>
+      </div>
+    </>
+  );
 }
