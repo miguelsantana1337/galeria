@@ -273,6 +273,52 @@ h2 {
   display: grid;
   gap: 8px;
 }
+.connection-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 auto 18px;
+  width: min(100%, 1180px);
+  padding: 13px 16px;
+  border: 1px solid #d99435;
+  border-radius: 14px;
+  color: #6c3c08;
+  background: #fff4df;
+  font-weight: 650;
+}
+.queue-summary {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--leaf) 7%, white);
+}
+.queue-summary > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.queue-summary span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.queue-summary progress {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  accent-color: var(--leaf);
+}
+.queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.queue-actions .button {
+  width: auto;
+}
 .queue-row {
   display: flex;
   align-items: center;
@@ -701,6 +747,29 @@ h2 {
   padding: 28px;
   color: var(--muted);
 }
+.gallery-skeletons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 18px 0;
+}
+.gallery-skeletons span {
+  aspect-ratio: 4 / 3;
+  border-radius: 14px;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--line) 72%, white) 20%,
+    white 42%,
+    color-mix(in srgb, var(--line) 72%, white) 64%
+  );
+  background-size: 240% 100%;
+  animation: skeleton-wave 1.25s ease-in-out infinite;
+}
+@keyframes skeleton-wave {
+  to {
+    background-position: -140% 0;
+  }
+}
 .empty-gallery {
   flex-direction: column;
   border: 1px dashed var(--line);
@@ -984,6 +1053,9 @@ h2 {
   .photo-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+  .gallery-skeletons {
+    grid-template-columns: repeat(2, 1fr);
+  }
   .metric-grid {
     grid-template-columns: repeat(3, 1fr);
   }
@@ -1058,6 +1130,9 @@ h2 {
   .photo-grid {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+  .gallery-skeletons {
+    grid-template-columns: 1fr;
   }
   .photo-card img {
     aspect-ratio: 3 / 2;

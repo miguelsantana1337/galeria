@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Check,
@@ -20,6 +20,9 @@ import {
   MessageCircle,
   CheckCircle2,
   Circle,
+  Pause,
+  Play,
+  WifiOff,
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
@@ -86,7 +89,10 @@ export function EventManager({
     [busy, setBusy] = useState(false),
     [published, setPublished] = useState(event.status === "published"),
     [token, setToken] = useState(event.share_token),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [paused, setPaused] = useState(false),
+    [online, setOnline] = useState(true);
+  const pauseRequested = useRef(false);
   const [settings, setSettings] = useState({
       name: event.name,
       event_date: event.event_date || "",
@@ -122,17 +128,38 @@ export function EventManager({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [busy]);
-  async function upload(selected: File[]) {
+  useEffect(() => {
+    const updateConnection = () => setOnline(navigator.onLine);
+    const timer = window.setTimeout(updateConnection, 0);
+    window.addEventListener("online", updateConnection);
+    window.addEventListener("offline", updateConnection);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("online", updateConnection);
+      window.removeEventListener("offline", updateConnection);
+    };
+  }, []);
+  async function upload(selected: File[], preserveQueue = false) {
+    pauseRequested.current = false;
+    setPaused(false);
     setBusy(true);
-    setQueue(selected.map((file) => ({ file, status: "waiting" })));
+    if (preserveQueue)
+      setQueue((old) =>
+        old.map((item) =>
+          selected.includes(item.file)
+            ? { ...item, status: "waiting", message: "Na fila" }
+            : item,
+        ),
+      );
+    else setQueue(selected.map((file) => ({ file, status: "waiting" })));
     try {
       await getFaceEngine();
       const supabase = createSupabaseBrowserClient();
-      for (let index = 0; index < selected.length; index++) {
-        const file = selected[index];
+      for (const file of selected) {
+        if (pauseRequested.current) break;
         setQueue((old) =>
-          old.map((item, i) =>
-            i === index
+          old.map((item) =>
+            item.file === file
               ? {
                   ...item,
                   status: "processing",
@@ -149,8 +176,8 @@ export function EventManager({
             safeName = `${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`,
             path = `${event.id}/${safeName}`;
           setQueue((old) =>
-            old.map((item, i) =>
-              i === index
+            old.map((item) =>
+              item.file === file
                 ? {
                     ...item,
                     message: `${analysis.faces.length} rosto(s) · enviando…`,
@@ -192,8 +219,8 @@ export function EventManager({
             },
           ]);
           setQueue((old) =>
-            old.map((item, i) =>
-              i === index
+            old.map((item) =>
+              item.file === file
                 ? {
                     ...item,
                     status: "done",
@@ -204,8 +231,8 @@ export function EventManager({
           );
         } catch (error) {
           setQueue((old) =>
-            old.map((item, i) =>
-              i === index
+            old.map((item) =>
+              item.file === file
                 ? {
                     ...item,
                     status: "error",
@@ -224,9 +251,18 @@ export function EventManager({
     }
   }
   async function chooseFiles(e: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []).filter(
+    const candidates = Array.from(e.target.files || []).filter(
       (file) => file.type.startsWith("image/") && file.size <= 15 * 1024 * 1024,
     );
+    const seen = new Set<string>();
+    const files = candidates.filter((file) => {
+      const signature = `${file.name}:${file.size}:${file.lastModified}`;
+      if (seen.has(signature)) return false;
+      seen.add(signature);
+      return true;
+    });
+    if (files.length !== candidates.length)
+      setNotice("Arquivos repetidos nesta seleção foram ignorados.");
     if (files.length) await upload(files);
     e.target.value = "";
   }
@@ -384,6 +420,13 @@ export function EventManager({
   const failed = queue
       .filter((item) => item.status === "error")
       .map((item) => item.file),
+    waiting = queue
+      .filter((item) => item.status === "waiting")
+      .map((item) => item.file),
+    completedCount = queue.filter((item) => item.status === "done").length,
+    progress = queue.length
+      ? Math.round((completedCount / queue.length) * 100)
+      : 0,
     faces = photos.reduce((sum, p) => sum + p.face_count, 0),
     conversion = metrics.selfie
       ? Math.round((metrics.match / metrics.selfie) * 100)
@@ -430,6 +473,12 @@ export function EventManager({
       {notice && (
         <p className="notice" role="status">
           {notice}
+        </p>
+      )}
+      {!online && (
+        <p className="connection-warning" role="alert">
+          <WifiOff size={18} /> Internet instável ou indisponível. A fila será
+          preservada nesta tela para você tentar novamente.
         </p>
       )}
       <section className="metric-grid">
@@ -480,6 +529,16 @@ export function EventManager({
             </label>
             {queue.length > 0 && (
               <div className="queue" aria-live="polite">
+                <div className="queue-summary">
+                  <div>
+                    <strong>{progress}% concluído</strong>
+                    <span>
+                      {completedCount} enviadas · {waiting.length} na fila ·{" "}
+                      {failed.length} com falha
+                    </span>
+                  </div>
+                  <progress value={completedCount} max={queue.length} />
+                </div>
                 {queue.map((item, i) => (
                   <div
                     className={`queue-row ${item.status}`}
@@ -498,14 +557,38 @@ export function EventManager({
                     </div>
                   </div>
                 ))}
-                {failed.length > 0 && !busy && (
-                  <button
-                    className="button secondary"
-                    onClick={() => upload(failed)}
-                  >
-                    <RefreshCw size={16} /> Tentar falhas novamente
-                  </button>
-                )}
+                <div className="queue-actions">
+                  {busy && (
+                    <button
+                      className="button secondary"
+                      onClick={() => {
+                        pauseRequested.current = true;
+                        setPaused(true);
+                        setNotice(
+                          "A fila será pausada assim que a foto atual terminar.",
+                        );
+                      }}
+                    >
+                      <Pause size={16} /> Pausar após esta foto
+                    </button>
+                  )}
+                  {paused && !busy && waiting.length > 0 && (
+                    <button
+                      className="button secondary"
+                      onClick={() => void upload(waiting, true)}
+                    >
+                      <Play size={16} /> Continuar fila
+                    </button>
+                  )}
+                  {failed.length > 0 && !busy && (
+                    <button
+                      className="button secondary"
+                      onClick={() => void upload(failed, true)}
+                    >
+                      <RefreshCw size={16} /> Tentar falhas novamente
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </section>

@@ -99,7 +99,8 @@ export function GalleryFinder({
         : "Este link está incompleto. Peça o link privado ao fotógrafo.",
     ),
     [consent, setConsent] = useState(false),
-    [previewId, setPreviewId] = useState<string | null>(null);
+    [previewId, setPreviewId] = useState<string | null>(null),
+    [savingPhotoId, setSavingPhotoId] = useState<string | null>(null);
   const announced = useRef(false);
   const sentinel = useRef<HTMLDivElement>(null);
   const hours = useMemo(
@@ -131,6 +132,12 @@ export function GalleryFinder({
       document.body.style.overflow = "";
       window.removeEventListener("keydown", onKeyDown);
     };
+  }, [photos, previewIndex, previewPhoto]);
+  useEffect(() => {
+    const next = photos[previewIndex + 1];
+    if (!previewPhoto || !next) return;
+    const preload = new window.Image();
+    preload.src = next.previewUrl;
   }, [photos, previewIndex, previewPhoto]);
 
   const loadPhotos = useCallback(
@@ -324,6 +331,8 @@ export function GalleryFinder({
     return response.json() as Promise<{ url: string; name: string }>;
   }
   async function download(photo: ResultPhoto) {
+    setSavingPhotoId(photo.id);
+    setError("");
     try {
       const file = await getDownload(photo.id);
       const response = await fetch(file.url);
@@ -356,6 +365,8 @@ export function GalleryFinder({
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       setError(e instanceof Error ? e.message : "Download indisponível.");
+    } finally {
+      setSavingPhotoId(null);
     }
   }
   function toggleFavorite(id: string) {
@@ -624,6 +635,14 @@ export function GalleryFinder({
                 />{" "}
                 Favoritas {favorites.size ? `(${favorites.size})` : ""}
               </button>
+              {favorites.size > 0 && (
+                <button
+                  className="button secondary"
+                  onClick={() => setSelected(new Set(favorites))}
+                >
+                  <Check size={18} /> Selecionar favoritas
+                </button>
+              )}
             </div>
             {hours.length === 0 && data && (
               <p className="timeline-note">
@@ -632,9 +651,10 @@ export function GalleryFinder({
               </p>
             )}
             {busy && (
-              <div className="gallery-loading">
-                <LoaderCircle className="spin" />
-                <span>{status || "Carregando prévias…"}</span>
+              <div className="gallery-skeletons" aria-label="Carregando fotos">
+                {Array.from({ length: 6 }, (_, index) => (
+                  <span key={index} />
+                ))}
               </div>
             )}
             {error && (
@@ -700,15 +720,27 @@ export function GalleryFinder({
                       unoptimized
                     />
                   </button>
-                  <button className="download" onClick={() => download(photo)}>
+                  <button
+                    className="download"
+                    disabled={savingPhotoId === photo.id}
+                    onClick={() => download(photo)}
+                  >
                     <span className="mobile-save-icon">
                       <Share2 size={17} />
                     </span>
                     <span className="desktop-save-icon">
                       <Download size={17} />
                     </span>
-                    <span className="mobile-save-label">Salvar foto</span>
-                    <span className="desktop-save-label">Baixar original</span>
+                    <span className="mobile-save-label">
+                      {savingPhotoId === photo.id
+                        ? "Preparando foto…"
+                        : "Salvar foto"}
+                    </span>
+                    <span className="desktop-save-label">
+                      {savingPhotoId === photo.id
+                        ? "Preparando original…"
+                        : "Baixar original"}
+                    </span>
                   </button>
                 </article>
               ))}
@@ -818,8 +850,19 @@ export function GalleryFinder({
             />
             <div className="lightbox-footer">
               <span>{previewPhoto.name}</span>
-              <button className="button" onClick={() => download(previewPhoto)}>
-                <Share2 size={18} /> Salvar foto
+              <button
+                className="button"
+                disabled={savingPhotoId === previewPhoto.id}
+                onClick={() => download(previewPhoto)}
+              >
+                {savingPhotoId === previewPhoto.id ? (
+                  <LoaderCircle className="spin" size={18} />
+                ) : (
+                  <Share2 size={18} />
+                )}
+                {savingPhotoId === previewPhoto.id
+                  ? "Preparando foto original…"
+                  : "Salvar foto"}
               </button>
             </div>
           </div>
