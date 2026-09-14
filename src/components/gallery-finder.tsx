@@ -542,11 +542,15 @@ export function GalleryFinder({
                 hidden
                 type="file"
                 accept="image/*"
-                capture="user"
                 disabled={busy || !data || !consent}
                 onChange={find}
               />
             </label>
+            {consent && !busy && (
+              <p className="privacy-note">
+                Escolha uma foto existente, um arquivo ou abra a câmera.
+              </p>
+            )}
             {!consent && (
               <p className="privacy-note">
                 Marque a autorização acima para liberar a selfie.
