@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const schema = z.object({
@@ -29,6 +30,17 @@ export async function PATCH(
       { error: "Acesso não autorizado." },
       { status: 401 },
     );
+  const { data: ownedEvent } = await supabase
+    .from("events")
+    .select("id")
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (!ownedEvent)
+    return NextResponse.json(
+      { error: "Evento não encontrado para esta conta." },
+      { status: 404 },
+    );
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success)
     return NextResponse.json(
@@ -56,8 +68,17 @@ export async function PATCH(
       Date.now() + parsed.data.retention_days * 86400000,
     ).toISOString(),
   };
-  const { error } = await supabase.from("events").update(values).eq("id", id);
-  return error
-    ? NextResponse.json({ error: "Não foi possível salvar." }, { status: 400 })
-    : NextResponse.json({ ok: true, expires_at: values.expires_at });
+  const { data: saved, error } = await createSupabaseAdminClient()
+    .from("events")
+    .update(values)
+    .eq("id", id)
+    .eq("owner_id", user.id)
+    .select("description,banner_path,organizer_logos,expires_at,updated_at")
+    .single();
+  return error || !saved
+    ? NextResponse.json(
+        { error: "Não foi possível confirmar o salvamento." },
+        { status: 400 },
+      )
+    : NextResponse.json({ ok: true, event: saved });
 }

@@ -293,19 +293,25 @@ export function EventManager({
       setNotice("Novo link privado criado.");
     } else setNotice(body.error);
   }
-  async function saveSettings() {
+  async function saveSettings(
+    nextSettings = settings,
+    successMessage = "Configurações salvas.",
+  ) {
     setSaving(true);
     const response = await fetch(`/api/events/${event.id}/settings`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(nextSettings),
       }),
       body = await response.json();
     setSaving(false);
     if (response.ok) {
-      setExpiresAt(body.expires_at);
-      setNotice("Configurações salvas.");
-    } else setNotice(body.error);
+      setExpiresAt(body.event.expires_at);
+      setNotice(successMessage);
+      return true;
+    }
+    setNotice(body.error);
+    return false;
   }
   async function uploadBrandAsset(file: File, kind: "banner" | "logo") {
     if (!file.type.startsWith("image/") || file.size > 8 * 1024 * 1024) {
@@ -328,18 +334,34 @@ export function EventManager({
     }
     const preview = URL.createObjectURL(file);
     if (kind === "banner") {
-      setSettings((old) => ({ ...old, banner_path: path }));
+      const previousPreview = bannerPreview;
+      const next = { ...settings, banner_path: path };
+      setSettings(next);
       setBannerPreview(preview);
+      if (!(await saveSettings(next, "Banner enviado e salvo."))) {
+        setSettings(settings);
+        setBannerPreview(previousPreview);
+        URL.revokeObjectURL(preview);
+        await createSupabaseBrowserClient()
+          .storage.from("event-photos")
+          .remove([path]);
+      }
     } else {
-      setSettings((old) => ({
-        ...old,
-        organizer_logos: [...old.organizer_logos, path],
-      }));
+      const next = {
+        ...settings,
+        organizer_logos: [...settings.organizer_logos, path],
+      };
+      setSettings(next);
       setLogoPreviews((old) => [...old, preview]);
+      if (!(await saveSettings(next, "Logo enviado e salvo."))) {
+        setSettings(settings);
+        setLogoPreviews((old) => old.slice(0, -1));
+        URL.revokeObjectURL(preview);
+        await createSupabaseBrowserClient()
+          .storage.from("event-photos")
+          .remove([path]);
+      }
     }
-    setNotice(
-      "Imagem enviada. Clique em salvar configurações para publicar a alteração.",
-    );
   }
   function removeLogo(index: number) {
     setSettings((old) => ({
@@ -802,7 +824,11 @@ export function EventManager({
                 <option value={365}>1 ano</option>
               </select>
             </label>
-            <button className="button" onClick={saveSettings} disabled={saving}>
+            <button
+              className="button"
+              onClick={() => void saveSettings()}
+              disabled={saving}
+            >
               <Save size={16} />
               {saving ? "Salvando…" : "Salvar configurações"}
             </button>
