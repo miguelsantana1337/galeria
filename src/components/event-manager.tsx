@@ -15,7 +15,11 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { extractFaces, getFaceEngine } from "@/lib/face-engine";
+import {
+  extractCaptureTime,
+  extractFaces,
+  getFaceEngine,
+} from "@/lib/face-engine";
 
 type EventInfo = {
   id: string;
@@ -111,7 +115,10 @@ export function EventManager({
           ),
         );
         try {
-          const analysis = await extractFaces(file),
+          const [analysis, captureTime] = await Promise.all([
+              extractFaces(file),
+              extractCaptureTime(file),
+            ]),
             safeName = `${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`,
             path = `${event.id}/${safeName}`;
           setQueue((old) =>
@@ -136,6 +143,8 @@ export function EventManager({
               originalName: file.name,
               width: analysis.width,
               height: analysis.height,
+              takenAt: captureTime.takenAt,
+              takenAtSource: captureTime.source,
               faces: analysis.faces,
             }),
           });
@@ -380,15 +389,15 @@ export function EventManager({
                 {photos.map((photo) => (
                   <article key={photo.id}>
                     {photo.preview_url ? (
-                    <Image
-                      src={photo.preview_url}
-                      alt={photo.original_name}
-                      width={260}
-                      height={180}
-                      loading="lazy"
-                      sizes="(max-width: 600px) 50vw, 260px"
-                      unoptimized
-                    />
+                      <Image
+                        src={photo.preview_url}
+                        alt={photo.original_name}
+                        width={260}
+                        height={180}
+                        loading="lazy"
+                        sizes="(max-width: 600px) 50vw, 260px"
+                        unoptimized
+                      />
                     ) : (
                       <div className="preview-placeholder">
                         <Images />

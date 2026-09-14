@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const schema = z.object({
   key: z.string().uuid(),
-  photoIds: z.array(z.string().uuid()).min(1).max(100),
+  photoIds: z.array(z.string().uuid()).min(1).max(500),
 });
 export async function POST(
   request: Request,
