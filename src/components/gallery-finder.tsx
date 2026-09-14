@@ -710,7 +710,9 @@ export function GalleryFinder({
           <span>
             Galeria disponível até{" "}
             {data.event.expires_at
-              ? new Date(data.event.expires_at).toLocaleDateString("pt-BR")
+              ? new Date(data.event.expires_at).toLocaleDateString("pt-BR", {
+                  timeZone: "America/Sao_Paulo",
+                })
               : "a data definida pelo organizador"}
             .
           </span>

@@ -105,12 +105,16 @@ export function EventManager({
     [logoPreviews, setLogoPreviews] = useState<(string | null)[]>(
       event.logo_preview_urls,
     ),
-    [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+    [qrDataUrl, setQrDataUrl] = useState<string | null>(null),
+    [origin, setOrigin] = useState("");
   const publicUrl = useMemo(
-    () =>
-      `${typeof window === "undefined" ? "" : location.origin}/evento/${event.slug}?k=${token}`,
-    [event.slug, token],
+    () => `${origin}/evento/${event.slug}?k=${token}`,
+    [event.slug, origin, token],
   );
+  useEffect(() => {
+    const timer = window.setTimeout(() => setOrigin(window.location.origin), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (busy) e.preventDefault();
@@ -804,7 +808,10 @@ export function EventManager({
             </button>
             {expiresAt && (
               <small className="muted">
-                Expira em {new Date(expiresAt).toLocaleDateString("pt-BR")}
+                Expira em{" "}
+                {new Date(expiresAt).toLocaleDateString("pt-BR", {
+                  timeZone: "America/Sao_Paulo",
+                })}
               </small>
             )}
           </section>
