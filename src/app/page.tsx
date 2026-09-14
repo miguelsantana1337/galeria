@@ -13,7 +13,7 @@ export default function Home() {
         <div className="hero-card">
           <span className="eyebrow"><Camera size={15} /> Sua história, no seu rosto</span>
           <h1>Encontre o seu momento.</h1>
-          <p className="lead">Digite o código do evento e envie uma selfie. Em poucos instantes, você vê apenas as fotos em que aparece.</p>
+          <p className="lead">Digite o nome do evento e envie uma selfie. Em poucos instantes, você vê apenas as fotos em que aparece.</p>
           <EventCodeForm />
           <p className="privacy"><LockKeyhole size={15} /> Sua selfie é analisada no seu aparelho e não fica armazenada.</p>
         </div>
