@@ -103,6 +103,7 @@ export function GalleryFinder({
     [savingPhotoId, setSavingPhotoId] = useState<string | null>(null);
   const announced = useRef(false);
   const sentinel = useRef<HTMLDivElement>(null);
+  const cachedFaces = useRef<FaceRecord[] | null>(null);
   const hours = useMemo(
     () =>
       [
@@ -275,6 +276,8 @@ export function GalleryFinder({
     setError("");
     void activity(slug, accessKey, "selfie", undefined, true);
     try {
+      setStatus("Preparando reconhecimento facial…");
+      await getFaceEngine((message) => setStatus(message));
       setStatus("Lendo seu rosto…");
       const analysis = await extractFaces(file, 1);
       if (analysis.faces.length !== 1)
@@ -282,14 +285,29 @@ export function GalleryFinder({
           "Não encontrei um rosto nítido. Use uma selfie frontal, com boa luz e sem outras pessoas.",
         );
       setStatus("Procurando você nas fotos…");
-      const faceRecords = data.faces.length
-        ? data.faces
-        : (((
-            await fetch(
-              `/api/public/events/${slug}?k=${encodeURIComponent(accessKey)}&faces=1`,
-              { cache: "no-store" },
-            ).then((response) => response.json())
-          ).faces || []) as FaceRecord[]);
+      if (!cachedFaces.current) {
+        const response = await fetch(
+          `/api/public/events/${slug}/faces?k=${encodeURIComponent(accessKey)}`,
+          { cache: "no-store" },
+        );
+        if (!response.ok)
+          throw new Error(
+            "Não foi possível carregar a busca facial. Verifique sua internet e tente novamente.",
+          );
+        const payload = await response.json();
+        cachedFaces.current = ((payload.faces || []) as FaceRecord[]).filter(
+          (face) =>
+            typeof face.photo_id === "string" &&
+            Array.isArray(face.descriptor) &&
+            face.descriptor.length === 1024 &&
+            face.descriptor.every(Number.isFinite),
+        );
+      }
+      const faceRecords = cachedFaces.current;
+      if (!faceRecords.length)
+        throw new Error(
+          "Este evento ainda não possui rostos indexados. Fale com o fotógrafo.",
+        );
       const human = await getFaceEngine(),
         query = analysis.faces[0].descriptor;
       const ids = [

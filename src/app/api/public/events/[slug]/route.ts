@@ -9,7 +9,6 @@ export async function GET(
   const { slug } = await params;
   const query = new URL(request.url).searchParams;
   const key = query.get("k");
-  const includeFaces = query.get("faces") === "1";
   const admin = createSupabaseAdminClient();
   const { data: event } = await admin
     .from("events")
@@ -68,14 +67,6 @@ export async function GET(
     banner_path: undefined,
     organizer_logos: undefined,
   };
-  const faces = includeFaces
-    ? (
-        await admin
-          .from("face_descriptors")
-          .select("photo_id,descriptor,detection_score")
-          .eq("event_id", event.id)
-      ).data || []
-    : [];
   const { data: photos } = await admin
     .from("photos")
     .select("id,taken_at")
@@ -83,7 +74,7 @@ export async function GET(
     .eq("status", "ready")
     .order("taken_at", { ascending: true, nullsFirst: false });
   return NextResponse.json(
-    { event: publicEvent, faces, photos: photos || [] },
+    { event: publicEvent, faces: [], photos: photos || [] },
     {
       headers: {
         "Cache-Control": "private, no-store",
