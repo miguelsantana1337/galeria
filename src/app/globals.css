@@ -39,6 +39,7 @@ h1 { font-family: var(--font-display), serif; font-size: clamp(3.2rem, 10vw, 6.5
 .stack { display: grid; gap: 18px; }
 .field { display: grid; gap: 8px; }
 .field label { font-size: .85rem; font-weight: 700; }
+.field small { color: var(--muted); line-height: 1.45; }
 .field input { border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; outline: 0; }
 .field input:focus { border-color: var(--leaf); box-shadow: 0 0 0 3px rgba(35,92,58,.12); }
 .notice { padding: 14px 16px; border-radius: 12px; background: #eef4ec; color: var(--leaf-dark); font-size: .9rem; }
