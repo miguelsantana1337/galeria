@@ -438,6 +438,67 @@ export function GalleryFinder({
       setStatus("");
     }
   }
+  async function shareSelected() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (ids.length > 20) {
+      setError(
+        "Para o celular não ficar pesado, compartilhe até 20 fotos por vez.",
+      );
+      return;
+    }
+    if (
+      typeof navigator.share !== "function" ||
+      typeof navigator.canShare !== "function"
+    ) {
+      setError(
+        "Este navegador não permite compartilhar várias fotos. Abra cada foto e toque em Salvar foto.",
+      );
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setStatus(`Preparando 0 de ${ids.length}…`);
+    try {
+      const files: File[] = [];
+      for (let index = 0; index < ids.length; index++) {
+        setStatus(`Preparando ${index + 1} de ${ids.length}…`);
+        const item = await getDownload(ids[index]);
+        const response = await fetch(item.url);
+        if (!response.ok) throw new Error("Não foi possível abrir uma foto.");
+        const blob = await response.blob();
+        files.push(
+          new File([blob], item.name, {
+            type: blob.type || "image/jpeg",
+          }),
+        );
+      }
+      if (!navigator.canShare({ files }))
+        throw new Error(
+          "Este aparelho não permite compartilhar tantas fotos juntas. Selecione menos fotos.",
+        );
+      await navigator.share({
+        files,
+        title: data?.event.name || "Minha Galeria",
+      });
+      void activity(slug, accessKey, "download", ids.length);
+      setSelected(new Set());
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível compartilhar as fotos.",
+      );
+    } finally {
+      setBusy(false);
+      setStatus("");
+    }
+  }
+  function handleSelectedPhotos() {
+    if (window.matchMedia("(pointer: coarse)").matches) void shareSelected();
+    else void downloadZip();
+  }
   if (error && !data)
     return (
       <main className="finder-shell">
@@ -802,9 +863,23 @@ export function GalleryFinder({
           >
             Limpar
           </button>
-          <button className="button" disabled={busy} onClick={downloadZip}>
-            <Package size={18} />
-            {busy ? status : "Baixar ZIP"}
+          <button
+            className="button"
+            disabled={busy}
+            onClick={handleSelectedPhotos}
+          >
+            <span className="desktop-save-icon">
+              <Package size={18} />
+            </span>
+            <span className="mobile-save-icon">
+              <Share2 size={18} />
+            </span>
+            <span className="desktop-save-label">
+              {busy ? status : "Baixar ZIP"}
+            </span>
+            <span className="mobile-save-label">
+              {busy ? status : "Compartilhar fotos"}
+            </span>
           </button>
         </aside>
       )}

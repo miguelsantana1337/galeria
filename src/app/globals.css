@@ -1093,6 +1093,16 @@ h2 {
 .ios-save-note {
   display: none;
 }
+@media (pointer: coarse) {
+  .desktop-save-icon,
+  .desktop-save-label {
+    display: none;
+  }
+  .mobile-save-icon,
+  .mobile-save-label {
+    display: inline-flex;
+  }
+}
 .retry {
   margin: 0 auto;
   width: auto;
