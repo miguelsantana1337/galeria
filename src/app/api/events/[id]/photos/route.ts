@@ -19,6 +19,15 @@ const payloadSchema = z.object({
     .max(50),
 });
 
+const deletePayloadSchema = z
+  .union([
+    z.object({ photoId: z.string().uuid() }),
+    z.object({ photoIds: z.array(z.string().uuid()).min(1).max(100) }),
+  ])
+  .transform((payload) =>
+    "photoIds" in payload ? payload.photoIds : [payload.photoId],
+  );
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -93,25 +102,26 @@ export async function DELETE(
       { error: "Acesso não autorizado." },
       { status: 401 },
     );
-  const parsed = z
-    .object({ photoId: z.string().uuid() })
-    .safeParse(await request.json());
+  const parsed = deletePayloadSchema.safeParse(await request.json());
   if (!parsed.success)
-    return NextResponse.json({ error: "Foto inválida." }, { status: 400 });
-  const { data: photo } = await supabase
-    .from("photos")
-    .select("storage_path")
-    .eq("id", parsed.data.photoId)
-    .eq("event_id", id)
-    .single();
-  if (!photo)
     return NextResponse.json(
-      { error: "Foto não encontrada." },
+      { error: "Seleção de fotos inválida." },
+      { status: 400 },
+    );
+  const photoIds = [...new Set(parsed.data)];
+  const { data: photos } = await supabase
+    .from("photos")
+    .select("id,storage_path")
+    .in("id", photoIds)
+    .eq("event_id", id);
+  if (!photos || photos.length !== photoIds.length)
+    return NextResponse.json(
+      { error: "Uma ou mais fotos não foram encontradas neste evento." },
       { status: 404 },
     );
   const { error: storageError } = await supabase.storage
     .from("event-photos")
-    .remove([photo.storage_path]);
+    .remove(photos.map((photo) => photo.storage_path));
   if (storageError)
     return NextResponse.json(
       { error: "Não foi possível remover o arquivo." },
@@ -120,12 +130,12 @@ export async function DELETE(
   const { error } = await supabase
     .from("photos")
     .delete()
-    .eq("id", parsed.data.photoId)
+    .in("id", photoIds)
     .eq("event_id", id);
   return error
     ? NextResponse.json(
         { error: "Não foi possível excluir a foto." },
         { status: 400 },
       )
-    : NextResponse.json({ ok: true });
+    : NextResponse.json({ ok: true, deleted: photoIds.length });
 }

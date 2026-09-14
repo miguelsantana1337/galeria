@@ -23,6 +23,7 @@ import {
   Pause,
   Play,
   WifiOff,
+  ListChecks,
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
@@ -91,7 +92,10 @@ export function EventManager({
     [token, setToken] = useState(event.share_token),
     [notice, setNotice] = useState(""),
     [paused, setPaused] = useState(false),
-    [online, setOnline] = useState(true);
+    [online, setOnline] = useState(true),
+    [selectionMode, setSelectionMode] = useState(false),
+    [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set()),
+    [deletingPhotos, setDeletingPhotos] = useState(false);
   const pauseRequested = useRef(false);
   const [settings, setSettings] = useState({
       name: event.name,
@@ -406,16 +410,81 @@ export function EventManager({
     }));
     setLogoPreviews((old) => old.filter((_, i) => i !== index));
   }
-  async function removePhoto(photo: Photo) {
-    if (!confirm(`Excluir ${photo.original_name}?`)) return;
-    const response = await fetch(`/api/events/${event.id}/photos`, {
-      method: "DELETE",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ photoId: photo.id }),
+  function togglePhotoSelection(photoId: string) {
+    setSelectedPhotoIds((current) => {
+      const next = new Set(current);
+      if (next.has(photoId)) next.delete(photoId);
+      else next.add(photoId);
+      return next;
     });
-    if (response.ok)
-      setPhotos((old) => old.filter((item) => item.id !== photo.id));
-    else setNotice((await response.json()).error);
+  }
+  function closeSelectionMode() {
+    setSelectionMode(false);
+    setSelectedPhotoIds(new Set());
+  }
+  async function deletePhotoIds(photoIds: string[]) {
+    setDeletingPhotos(true);
+    setNotice("");
+    const deletedIds: string[] = [];
+    try {
+      for (let index = 0; index < photoIds.length; index += 100) {
+        const batch = photoIds.slice(index, index + 100);
+        const response = await fetch(`/api/events/${event.id}/photos`, {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ photoIds: batch }),
+        });
+        if (!response.ok) {
+          const payload = await response.json();
+          throw new Error(
+            payload.error || "Não foi possível excluir as fotos.",
+          );
+        }
+        deletedIds.push(...batch);
+        setPhotos((current) =>
+          current.filter((photo) => !batch.includes(photo.id)),
+        );
+      }
+      setNotice(
+        `${deletedIds.length} ${deletedIds.length === 1 ? "foto excluída" : "fotos excluídas"} com sucesso.`,
+      );
+      closeSelectionMode();
+    } catch (error) {
+      setSelectedPhotoIds((current) => {
+        const next = new Set(current);
+        deletedIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      setNotice(
+        deletedIds.length
+          ? `${deletedIds.length} fotos foram excluídas. ${error instanceof Error ? error.message : "Tente novamente para concluir as demais."}`
+          : error instanceof Error
+            ? error.message
+            : "Não foi possível excluir as fotos.",
+      );
+    } finally {
+      setDeletingPhotos(false);
+    }
+  }
+  async function removePhoto(photo: Photo) {
+    if (
+      !confirm(
+        `Excluir ${photo.original_name}? Esta ação não pode ser desfeita.`,
+      )
+    )
+      return;
+    await deletePhotoIds([photo.id]);
+  }
+  async function removeSelectedPhotos() {
+    const photoIds = [...selectedPhotoIds];
+    if (!photoIds.length) return;
+    if (
+      !confirm(
+        `Excluir definitivamente ${photoIds.length} ${photoIds.length === 1 ? "foto selecionada" : "fotos selecionadas"}? Esta ação não pode ser desfeita.`,
+      )
+    )
+      return;
+    await deletePhotoIds(photoIds);
   }
   const failed = queue
       .filter((item) => item.status === "error")
@@ -594,42 +663,133 @@ export function EventManager({
           </section>
           {photos.length > 0 && (
             <section className="panel stack">
-              <div>
-                <h2>Revisão das fotos</h2>
-                <p className="muted">
-                  Confira miniaturas e remova arquivos incorretos antes de
-                  publicar.
-                </p>
+              <div className="photo-review-heading">
+                <div>
+                  <h2>Revisão das fotos</h2>
+                  <p className="muted">
+                    Confira miniaturas e remova arquivos incorretos antes de
+                    publicar.
+                  </p>
+                </div>
+                {!selectionMode && (
+                  <button
+                    type="button"
+                    className="button secondary photo-selection-button"
+                    onClick={() => setSelectionMode(true)}
+                  >
+                    <ListChecks size={17} /> Selecionar fotos
+                  </button>
+                )}
               </div>
+              {selectionMode && (
+                <div
+                  className="bulk-photo-actions"
+                  role="toolbar"
+                  aria-label="Ações para fotos selecionadas"
+                >
+                  <div className="bulk-selection-count" aria-live="polite">
+                    <strong>{selectedPhotoIds.size}</strong>
+                    <span>
+                      {selectedPhotoIds.size === 1
+                        ? "foto selecionada"
+                        : "fotos selecionadas"}
+                    </span>
+                  </div>
+                  <div className="bulk-selection-buttons">
+                    <button
+                      type="button"
+                      className="bulk-select-all"
+                      onClick={() =>
+                        setSelectedPhotoIds(
+                          selectedPhotoIds.size === photos.length
+                            ? new Set()
+                            : new Set(photos.map((photo) => photo.id)),
+                        )
+                      }
+                      disabled={deletingPhotos}
+                    >
+                      {selectedPhotoIds.size === photos.length
+                        ? "Limpar seleção"
+                        : "Selecionar todas"}
+                    </button>
+                    <button
+                      type="button"
+                      className="bulk-delete-button"
+                      onClick={() => void removeSelectedPhotos()}
+                      disabled={!selectedPhotoIds.size || deletingPhotos}
+                    >
+                      {deletingPhotos ? (
+                        <LoaderCircle className="spin" size={17} />
+                      ) : (
+                        <Trash2 size={17} />
+                      )}
+                      {deletingPhotos
+                        ? "Excluindo…"
+                        : `Excluir ${selectedPhotoIds.size || ""}`}
+                    </button>
+                    <button
+                      type="button"
+                      className="bulk-cancel-button"
+                      onClick={closeSelectionMode}
+                      disabled={deletingPhotos}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="admin-photo-grid">
                 {photos.map((photo) => (
-                  <article key={photo.id}>
-                    {photo.preview_url ? (
-                      <Image
-                        src={photo.preview_url}
-                        alt={photo.original_name}
-                        width={260}
-                        height={180}
-                        loading="lazy"
-                        sizes="(max-width: 600px) 50vw, 260px"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="preview-placeholder">
-                        <Images />
-                      </div>
-                    )}
+                  <article
+                    key={photo.id}
+                    className={selectedPhotoIds.has(photo.id) ? "selected" : ""}
+                  >
+                    <div className="admin-photo-visual">
+                      {photo.preview_url ? (
+                        <Image
+                          src={photo.preview_url}
+                          alt={photo.original_name}
+                          width={260}
+                          height={180}
+                          loading="lazy"
+                          sizes="(max-width: 600px) 50vw, 260px"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="preview-placeholder">
+                          <Images />
+                        </div>
+                      )}
+                      {selectionMode && (
+                        <button
+                          type="button"
+                          className="admin-photo-select"
+                          aria-label={`${selectedPhotoIds.has(photo.id) ? "Desmarcar" : "Selecionar"} ${photo.original_name}`}
+                          aria-pressed={selectedPhotoIds.has(photo.id)}
+                          onClick={() => togglePhotoSelection(photo.id)}
+                        >
+                          <span>
+                            {selectedPhotoIds.has(photo.id) && (
+                              <Check size={18} strokeWidth={3} />
+                            )}
+                          </span>
+                        </button>
+                      )}
+                    </div>
                     <div>
-                      <span>
+                      <span className="admin-photo-meta">
                         <strong>{photo.original_name}</strong>
                         <small>{photo.face_count} rosto(s)</small>
                       </span>
-                      <button
-                        aria-label={`Excluir ${photo.original_name}`}
-                        onClick={() => removePhoto(photo)}
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      {!selectionMode && (
+                        <button
+                          aria-label={`Excluir ${photo.original_name}`}
+                          onClick={() => void removePhoto(photo)}
+                          disabled={deletingPhotos}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </article>
                 ))}
