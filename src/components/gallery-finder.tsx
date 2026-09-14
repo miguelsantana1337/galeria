@@ -33,6 +33,7 @@ import {
 import { extractFaces, getFaceEngine } from "@/lib/face-engine";
 
 type FaceRecord = { photo_id: string; descriptor: number[] };
+type PackedFaceRecord = { photo_id: string; descriptor: string };
 type PhotoMeta = { id: string; taken_at: string | null };
 type EventData = {
   event: {
@@ -295,13 +296,30 @@ export function GalleryFinder({
             "Não foi possível carregar a busca facial. Verifique sua internet e tente novamente.",
           );
         const payload = await response.json();
-        cachedFaces.current = ((payload.faces || []) as FaceRecord[]).filter(
-          (face) =>
-            typeof face.photo_id === "string" &&
-            Array.isArray(face.descriptor) &&
-            face.descriptor.length === 1024 &&
-            face.descriptor.every(Number.isFinite),
-        );
+        cachedFaces.current = ((payload.faces || []) as PackedFaceRecord[])
+          .map((face) => {
+            try {
+              const bytes = Uint8Array.from(atob(face.descriptor), (char) =>
+                char.charCodeAt(0),
+              );
+              const descriptor = Array.from(
+                new Float32Array(
+                  bytes.buffer,
+                  bytes.byteOffset,
+                  bytes.byteLength / Float32Array.BYTES_PER_ELEMENT,
+                ),
+              );
+              return { photo_id: face.photo_id, descriptor };
+            } catch {
+              return null;
+            }
+          })
+          .filter(
+            (face): face is FaceRecord =>
+              Boolean(face) &&
+              face!.descriptor.length === 1024 &&
+              face!.descriptor.every(Number.isFinite),
+          );
       }
       const faceRecords = cachedFaces.current;
       if (!faceRecords.length)

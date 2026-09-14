@@ -24,19 +24,32 @@ export async function GET(
       { status: 404 },
     );
 
-  const { data: faces, error } = await admin
-    .from("face_descriptors")
-    .select("photo_id,descriptor")
-    .eq("event_id", event.id);
+  const faces: { photo_id: string; descriptor: number[] }[] = [];
+  const batchSize = 50;
+  for (let offset = 0; ; offset += batchSize) {
+    const { data, error } = await admin
+      .from("face_descriptors")
+      .select("photo_id,descriptor")
+      .eq("event_id", event.id)
+      .range(offset, offset + batchSize - 1);
+    if (error)
+      return NextResponse.json(
+        { error: "Não foi possível carregar a busca facial." },
+        { status: 500 },
+      );
+    faces.push(...(data || []));
+    if (!data || data.length < batchSize) break;
+  }
 
-  if (error)
-    return NextResponse.json(
-      { error: "Não foi possível carregar a busca facial." },
-      { status: 500 },
-    );
+  const packedFaces = faces.map((face) => ({
+    photo_id: face.photo_id,
+    descriptor: Buffer.from(new Float32Array(face.descriptor).buffer).toString(
+      "base64",
+    ),
+  }));
 
   return NextResponse.json(
-    { faces: faces || [] },
+    { faces: packedFaces },
     {
       headers: {
         "Cache-Control": "private, no-store",
