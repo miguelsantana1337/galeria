@@ -1,4 +1,4 @@
-# Auditoria de produto — Fotos do Santana
+# Auditoria de produto — Minha Galeria
 
 Data: 14 de setembro de 2026  
 Superfície: produção em `galeria-pi-weld.vercel.app`  

@@ -16,11 +16,38 @@ export default async function EventPage({
   const { data: event } = await supabase
     .from("events")
     .select(
-      "id,name,slug,status,photo_count,event_date,share_token,welcome_message,brand_color,whatsapp_url,instagram_url,expires_at,retention_days",
+      "id,name,slug,status,photo_count,event_date,share_token,description,welcome_message,brand_color,whatsapp_url,instagram_url,expires_at,retention_days,banner_path,organizer_logos",
     )
     .eq("id", id)
     .single();
   if (!event) notFound();
+  const logoPaths = Array.isArray(event.organizer_logos)
+    ? event.organizer_logos.filter(
+        (path): path is string => typeof path === "string",
+      )
+    : [];
+  const brandingPaths = [event.banner_path, ...logoPaths].filter(
+    (path): path is string => Boolean(path),
+  );
+  const brandingSigned = await Promise.all(
+    brandingPaths.map(async (path) => ({
+      path,
+      url:
+        (
+          await supabase.storage
+            .from("event-photos")
+            .createSignedUrl(path, 3600, {
+              transform:
+                path === event.banner_path
+                  ? { width: 1200, quality: 70, resize: "cover" }
+                  : { width: 240, height: 160, quality: 80, resize: "contain" },
+            })
+        ).data?.signedUrl || null,
+    })),
+  );
+  const brandingUrls = new Map(
+    brandingSigned.map((item) => [item.path, item.url]),
+  );
   const { data: photos } = await supabase
     .from("photos")
     .select("id,original_name,face_count,status,storage_path")
@@ -74,7 +101,16 @@ export default async function EventPage({
   return (
     <main className="page">
       <EventManager
-        event={event}
+        event={{
+          ...event,
+          organizer_logos: logoPaths,
+          banner_preview_url: event.banner_path
+            ? brandingUrls.get(event.banner_path) || null
+            : null,
+          logo_preview_urls: logoPaths.map(
+            (path) => brandingUrls.get(path) || null,
+          ),
+        }}
         metrics={{
           view: metrics.view,
           selfie: metrics.selfie,

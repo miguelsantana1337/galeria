@@ -30,6 +30,9 @@ type PhotoMeta = { id: string; taken_at: string | null };
 type EventData = {
   event: {
     name: string;
+    description: string | null;
+    bannerUrl: string | null;
+    logoUrls: string[];
     match_threshold: number;
     welcome_message: string | null;
     brand_color: string;
@@ -233,7 +236,7 @@ export function GalleryFinder({
       <main className="finder-shell">
         <div className="finder-card">
           <span className="brand">
-            Fotos do Santana<span className="brand-dot">.</span>
+            Minha Galeria<span className="brand-dot">.</span>
           </span>
           <h1>Galeria indisponível.</h1>
           <p className="lead">{error}</p>
@@ -255,12 +258,52 @@ export function GalleryFinder({
     >
       <header className="finder-top">
         <Link className="brand" href="/">
-          Fotos do Santana<span className="brand-dot">.</span>
+          Minha Galeria<span className="brand-dot">.</span>
         </Link>
         <span className="privacy">
           <LockKeyhole size={14} /> Link privado
         </span>
       </header>
+      {data && (
+        <section
+          className={`event-cover ${data.event.bannerUrl ? "has-banner" : ""}`}
+          style={{ "--event-color": data.event.brand_color } as CSSProperties}
+        >
+          {data.event.bannerUrl && (
+            <Image
+              src={data.event.bannerUrl}
+              alt={`Banner de ${data.event.name}`}
+              width={1600}
+              height={900}
+              priority
+              unoptimized
+            />
+          )}
+          <div className="event-cover-shade" />
+          <div className="event-cover-content">
+            <span className="cover-kicker">Sua galeria do evento</span>
+            <h1>{data.event.name}</h1>
+            {data.event.description && <p>{data.event.description}</p>}
+          </div>
+          {data.event.logoUrls.length > 0 && (
+            <div className="organizer-strip">
+              <span>Realização</span>
+              <div>
+                {data.event.logoUrls.map((url, index) => (
+                  <Image
+                    key={url}
+                    src={url}
+                    alt={`Logo do organizador ${index + 1}`}
+                    width={140}
+                    height={72}
+                    unoptimized
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
       <section className="finder-card gallery-view">
         <span className="eyebrow">
           <Sparkles size={14} /> {data?.event.name || "Seu evento"}

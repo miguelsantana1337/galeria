@@ -60,16 +60,14 @@ export async function POST(
       { status: 400 },
     );
   if (parsed.data.faces.length) {
-    const { error: faceError } = await supabase
-      .from("face_descriptors")
-      .insert(
-        parsed.data.faces.map((face) => ({
-          photo_id: photo.id,
-          event_id: id,
-          descriptor: face.descriptor,
-          detection_score: face.score,
-        })),
-      );
+    const { error: faceError } = await supabase.from("face_descriptors").insert(
+      parsed.data.faces.map((face) => ({
+        photo_id: photo.id,
+        event_id: id,
+        descriptor: face.descriptor,
+        detection_score: face.score,
+      })),
+    );
     if (faceError) {
       await supabase.from("photos").delete().eq("id", photo.id);
       return NextResponse.json(

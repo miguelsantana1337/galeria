@@ -1,4 +1,4 @@
-# Fotos do Santana
+# Minha Galeria
 
 Plataforma multi-evento para participantes encontrarem suas fotos por reconhecimento facial. O frontend roda na Vercel; autenticação, banco e fotos privadas usam Supabase.
 

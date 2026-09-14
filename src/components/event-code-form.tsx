@@ -14,8 +14,15 @@ export function EventCodeForm() {
   }
   return (
     <form className="event-form" onSubmit={submit}>
-      <input aria-label="Nome do evento" placeholder="Nome do evento" value={code} onChange={(e) => setCode(e.target.value)} />
-      <button className="button" type="submit">Encontrar minhas fotos</button>
+      <input
+        aria-label="Nome do evento"
+        placeholder="Nome do evento"
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+      />
+      <button className="button" type="submit">
+        Encontrar minhas fotos
+      </button>
     </form>
   );
 }

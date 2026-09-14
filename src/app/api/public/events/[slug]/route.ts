@@ -14,7 +14,7 @@ export async function GET(
   const { data: event } = await admin
     .from("events")
     .select(
-      "id,name,event_date,match_threshold,welcome_message,brand_color,whatsapp_url,instagram_url,expires_at",
+      "id,name,event_date,description,banner_path,organizer_logos,match_threshold,welcome_message,brand_color,whatsapp_url,instagram_url,expires_at",
     )
     .eq("slug", slug)
     .eq("share_token", key || "")
@@ -30,6 +30,46 @@ export async function GET(
       { error: "Galeria indisponível." },
       { status: 404 },
     );
+  const logoPaths = Array.isArray(event.organizer_logos)
+    ? event.organizer_logos.filter(
+        (path): path is string => typeof path === "string",
+      )
+    : [];
+  const [{ data: banner }, ...logoResults] = await Promise.all([
+    event.banner_path
+      ? admin.storage
+          .from("event-photos")
+          .createSignedUrl(event.banner_path, 3600, {
+            transform: {
+              width: 1600,
+              height: 900,
+              quality: 74,
+              resize: "cover",
+            },
+          })
+      : Promise.resolve({ data: null }),
+    ...logoPaths.map((path) =>
+      admin.storage
+        .from("event-photos")
+        .createSignedUrl(path, 3600, {
+          transform: {
+            width: 280,
+            height: 160,
+            quality: 82,
+            resize: "contain",
+          },
+        }),
+    ),
+  ]);
+  const publicEvent = {
+    ...event,
+    bannerUrl: banner?.signedUrl || null,
+    logoUrls: logoResults
+      .map((result) => result.data?.signedUrl)
+      .filter(Boolean),
+    banner_path: undefined,
+    organizer_logos: undefined,
+  };
   const faces = includeFaces
     ? (
         await admin
@@ -45,7 +85,7 @@ export async function GET(
     .eq("status", "ready")
     .order("taken_at", { ascending: true, nullsFirst: false });
   return NextResponse.json(
-    { event, faces, photos: photos || [] },
+    { event: publicEvent, faces, photos: photos || [] },
     {
       headers: {
         "Cache-Control": "private, no-store",

@@ -13,6 +13,8 @@ import {
   Share2,
   Trash2,
   UploadCloud,
+  ImagePlus,
+  X,
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
@@ -29,12 +31,17 @@ type EventInfo = {
   photo_count: number;
   event_date: string | null;
   share_token: string;
+  description: string | null;
   welcome_message: string | null;
   brand_color: string;
   whatsapp_url: string | null;
   instagram_url: string | null;
   expires_at: string | null;
   retention_days: number;
+  banner_path: string | null;
+  organizer_logos: string[];
+  banner_preview_url: string | null;
+  logo_preview_urls: (string | null)[];
 };
 type Photo = {
   id: string;
@@ -75,14 +82,21 @@ export function EventManager({
     [token, setToken] = useState(event.share_token),
     [notice, setNotice] = useState("");
   const [settings, setSettings] = useState({
+      description: event.description || "",
       welcome_message: event.welcome_message || "",
       brand_color: event.brand_color || "#235c3a",
       whatsapp_url: event.whatsapp_url || "",
       instagram_url: event.instagram_url || "",
       retention_days: event.retention_days || 30,
+      banner_path: event.banner_path,
+      organizer_logos: event.organizer_logos,
     }),
     [saving, setSaving] = useState(false),
-    [expiresAt, setExpiresAt] = useState(event.expires_at);
+    [expiresAt, setExpiresAt] = useState(event.expires_at),
+    [bannerPreview, setBannerPreview] = useState(event.banner_preview_url),
+    [logoPreviews, setLogoPreviews] = useState<(string | null)[]>(
+      event.logo_preview_urls,
+    );
   const publicUrl = useMemo(
     () =>
       `${typeof window === "undefined" ? "" : location.origin}/evento/${event.slug}?k=${token}`,
@@ -253,6 +267,47 @@ export function EventManager({
       setNotice("Configurações salvas.");
     } else setNotice(body.error);
   }
+  async function uploadBrandAsset(file: File, kind: "banner" | "logo") {
+    if (!file.type.startsWith("image/") || file.size > 8 * 1024 * 1024) {
+      setNotice("Use uma imagem de até 8 MB.");
+      return;
+    }
+    if (kind === "logo" && settings.organizer_logos.length >= 5) {
+      setNotice("O limite é de cinco logos por evento.");
+      return;
+    }
+    setSaving(true);
+    const path = `${event.id}/branding/${kind}-${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+    const { error } = await createSupabaseBrowserClient()
+      .storage.from("event-photos")
+      .upload(path, file, { contentType: file.type, upsert: false });
+    setSaving(false);
+    if (error) {
+      setNotice("Não foi possível enviar esta imagem.");
+      return;
+    }
+    const preview = URL.createObjectURL(file);
+    if (kind === "banner") {
+      setSettings((old) => ({ ...old, banner_path: path }));
+      setBannerPreview(preview);
+    } else {
+      setSettings((old) => ({
+        ...old,
+        organizer_logos: [...old.organizer_logos, path],
+      }));
+      setLogoPreviews((old) => [...old, preview]);
+    }
+    setNotice(
+      "Imagem enviada. Clique em salvar configurações para publicar a alteração.",
+    );
+  }
+  function removeLogo(index: number) {
+    setSettings((old) => ({
+      ...old,
+      organizer_logos: old.organizer_logos.filter((_, i) => i !== index),
+    }));
+    setLogoPreviews((old) => old.filter((_, i) => i !== index));
+  }
   async function removePhoto(photo: Photo) {
     if (!confirm(`Excluir ${photo.original_name}?`)) return;
     const response = await fetch(`/api/events/${event.id}/photos`, {
@@ -275,7 +330,7 @@ export function EventManager({
     <>
       <header className="topbar compact">
         <a className="brand" href="/painel">
-          Fotos do Santana<span className="brand-dot">.</span>
+          Minha Galeria<span className="brand-dot">.</span>
         </a>
         <span className={`status ${published ? "live" : ""}`}>
           {published ? "Publicado" : "Rascunho"}
@@ -462,6 +517,107 @@ export function EventManager({
                 Use os dados reais do evento. Campos sociais são opcionais.
               </p>
             </div>
+            <div className="branding-editor">
+              <div className="brand-upload-block">
+                <span className="field-label">Banner do evento</span>
+                {bannerPreview ? (
+                  <div className="banner-editor-preview">
+                    <Image
+                      src={bannerPreview}
+                      alt="Prévia do banner"
+                      width={560}
+                      height={260}
+                      unoptimized
+                    />
+                    <button
+                      type="button"
+                      aria-label="Remover banner"
+                      onClick={() => {
+                        setBannerPreview(null);
+                        setSettings({ ...settings, banner_path: null });
+                      }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="brand-empty">
+                    <ImagePlus />
+                    <span>Imagem horizontal, recomendação 1600 × 900</span>
+                  </div>
+                )}
+                <label className="button secondary upload-brand-button">
+                  <ImagePlus size={16} />
+                  {bannerPreview ? "Trocar banner" : "Adicionar banner"}
+                  <input
+                    hidden
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void uploadBrandAsset(file, "banner");
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              <div className="brand-upload-block">
+                <span className="field-label">
+                  Logos dos organizadores{" "}
+                  <small>{settings.organizer_logos.length}/5</small>
+                </span>
+                <div className="logo-editor-grid">
+                  {logoPreviews.map((url, index) => (
+                    <div key={`${settings.organizer_logos[index]}-${index}`}>
+                      {url ? (
+                        <Image
+                          src={url}
+                          alt={`Logo ${index + 1}`}
+                          width={120}
+                          height={72}
+                          unoptimized
+                        />
+                      ) : (
+                        <ImagePlus />
+                      )}
+                      <button
+                        type="button"
+                        aria-label={`Remover logo ${index + 1}`}
+                        onClick={() => removeLogo(index)}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {settings.organizer_logos.length < 5 && (
+                  <label className="button secondary upload-brand-button">
+                    <ImagePlus size={16} /> Adicionar logo
+                    <input
+                      hidden
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void uploadBrandAsset(file, "logo");
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+            <label className="field">
+              <span>Descrição do evento</span>
+              <textarea
+                value={settings.description}
+                maxLength={800}
+                placeholder="Conte brevemente o que tornou este evento especial."
+                onChange={(e) =>
+                  setSettings({ ...settings, description: e.target.value })
+                }
+              />
+            </label>
             <label className="field">
               <span>Mensagem de boas-vindas</span>
               <textarea

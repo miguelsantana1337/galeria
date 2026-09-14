@@ -364,6 +364,80 @@ h2 {
   gap: 8px;
   font-size: 1.35rem;
 }
+.branding-editor {
+  display: grid;
+  gap: 18px;
+}
+.brand-upload-block {
+  display: grid;
+  gap: 10px;
+}
+.field-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.field-label small {
+  color: var(--muted);
+}
+.brand-empty,
+.banner-editor-preview {
+  min-height: 130px;
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  border: 1px dashed #9db1a1;
+  border-radius: 15px;
+  background: var(--paper);
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.78rem;
+}
+.banner-editor-preview img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+}
+.banner-editor-preview button,
+.logo-editor-grid button {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 25, 21, 0.82);
+  color: white;
+}
+.upload-brand-button {
+  cursor: pointer;
+}
+.logo-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.logo-editor-grid > div {
+  min-height: 76px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+}
+.logo-editor-grid img {
+  width: 100%;
+  height: 56px;
+  object-fit: contain;
+}
 .admin-photo-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -423,6 +497,98 @@ h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.event-cover {
+  width: min(100%, 1180px);
+  min-height: clamp(360px, 56vw, 620px);
+  margin: 8px auto 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: end;
+  border-radius: 30px;
+  background: linear-gradient(135deg, var(--event-color, var(--leaf)), #101713);
+  color: white;
+  isolation: isolate;
+}
+.event-cover > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -2;
+}
+.event-cover-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    rgba(9, 14, 10, 0.08) 25%,
+    rgba(9, 14, 10, 0.82) 100%
+  );
+}
+.event-cover-content {
+  width: min(760px, 100%);
+  padding: clamp(28px, 6vw, 64px);
+  padding-bottom: clamp(76px, 11vw, 116px);
+  text-align: left;
+}
+.event-cover-content h1 {
+  margin: 9px 0 12px;
+  font-size: clamp(3rem, 8vw, 6.8rem);
+  line-height: 0.88;
+  text-wrap: balance;
+}
+.event-cover-content p {
+  max-width: 640px;
+  margin: 0;
+  font-size: clamp(0.98rem, 2vw, 1.16rem);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
+}
+.cover-kicker {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.organizer-strip {
+  position: absolute;
+  left: clamp(18px, 4vw, 42px);
+  right: clamp(18px, 4vw, 42px);
+  bottom: 18px;
+  min-height: 68px;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  backdrop-filter: blur(12px);
+}
+.organizer-strip > span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.organizer-strip > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  overflow-x: auto;
+}
+.organizer-strip img {
+  width: auto;
+  height: 42px;
+  max-width: 125px;
+  object-fit: contain;
+  flex: 0 0 auto;
 }
 .finder-card {
   width: min(100%, 1050px);
@@ -644,6 +810,29 @@ h2 {
     justify-content: start;
     width: min(100%, 340px);
     text-align: left;
+  }
+  .event-cover {
+    min-height: 470px;
+    width: calc(100% + 4px);
+    margin-inline: -2px;
+    border-radius: 22px;
+  }
+  .event-cover-content {
+    padding: 26px;
+    padding-bottom: 118px;
+  }
+  .event-cover-content h1 {
+    font-size: clamp(3.1rem, 16vw, 4.7rem);
+  }
+  .organizer-strip {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 14px;
+  }
+  .organizer-strip img {
+    height: 35px;
+    max-width: 105px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
