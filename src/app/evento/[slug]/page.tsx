@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type PublicEventParams = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ k?: string }>;
+  searchParams: Promise<{ k?: string; v?: string }>;
 };
 
 function siteUrl() {
@@ -26,7 +26,10 @@ export async function generateMetadata({
   params,
   searchParams,
 }: PublicEventParams): Promise<Metadata> {
-  const [{ slug }, { k = "" }] = await Promise.all([params, searchParams]);
+  const [{ slug }, { k = "", v = "" }] = await Promise.all([
+    params,
+    searchParams,
+  ]);
   const unavailable: Metadata = {
     title: "Galeria indisponível | Minha Galeria",
     description: "Este link de galeria não está disponível.",
@@ -50,7 +53,7 @@ export async function generateMetadata({
   const baseUrl = siteUrl();
   const title = event.name;
   const description = metaDescription(event.description, event.name);
-  const eventUrl = `${baseUrl}/evento/${encodeURIComponent(slug)}?k=${encodeURIComponent(k)}`;
+  const eventUrl = `${baseUrl}/evento/${encodeURIComponent(slug)}?k=${encodeURIComponent(k)}${v ? `&v=${encodeURIComponent(v)}` : ""}`;
   const coverUrl = event.banner_path
     ? `${baseUrl}/api/public/events/${encodeURIComponent(slug)}/cover?k=${encodeURIComponent(k)}&v=${encodeURIComponent(event.updated_at)}`
     : null;

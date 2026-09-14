@@ -49,6 +49,7 @@ type EventInfo = {
   retention_days: number;
   banner_path: string | null;
   organizer_logos: string[];
+  updated_at: string;
   banner_preview_url: string | null;
   logo_preview_urls: (string | null)[];
 };
@@ -90,6 +91,7 @@ export function EventManager({
     [busy, setBusy] = useState(false),
     [published, setPublished] = useState(event.status === "published"),
     [token, setToken] = useState(event.share_token),
+    [shareVersion, setShareVersion] = useState(event.updated_at),
     [notice, setNotice] = useState(""),
     [paused, setPaused] = useState(false),
     [online, setOnline] = useState(true),
@@ -118,8 +120,9 @@ export function EventManager({
     [qrDataUrl, setQrDataUrl] = useState<string | null>(null),
     [origin, setOrigin] = useState("");
   const publicUrl = useMemo(
-    () => `${origin}/evento/${event.slug}?k=${token}`,
-    [event.slug, origin, token],
+    () =>
+      `${origin}/evento/${event.slug}?k=${token}&v=${encodeURIComponent(shareVersion)}`,
+    [event.slug, origin, shareVersion, token],
   );
   useEffect(() => {
     const timer = window.setTimeout(() => setOrigin(window.location.origin), 0);
@@ -347,6 +350,7 @@ export function EventManager({
     setSaving(false);
     if (response.ok) {
       setExpiresAt(body.event.expires_at);
+      setShareVersion(body.event.updated_at);
       setNotice(successMessage);
       return true;
     }

@@ -16,7 +16,7 @@ export default async function EventPage({
   const { data: event } = await supabase
     .from("events")
     .select(
-      "id,name,slug,status,photo_count,event_date,share_token,description,welcome_message,brand_color,whatsapp_url,instagram_url,expires_at,retention_days,banner_path,organizer_logos",
+      "id,name,slug,status,photo_count,event_date,share_token,description,welcome_message,brand_color,whatsapp_url,instagram_url,expires_at,retention_days,banner_path,organizer_logos,updated_at",
     )
     .eq("id", id)
     .single();
