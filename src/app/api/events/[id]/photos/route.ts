@@ -23,3 +23,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   return NextResponse.json({ id: photo.id }, { status: 201 });
 }
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params; const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Acesso não autorizado." }, { status: 401 });
+  const parsed = z.object({ photoId: z.string().uuid() }).safeParse(await request.json());
+  if (!parsed.success) return NextResponse.json({ error: "Foto inválida." }, { status: 400 });
+  const { data: photo } = await supabase.from("photos").select("storage_path").eq("id", parsed.data.photoId).eq("event_id", id).single();
+  if (!photo) return NextResponse.json({ error: "Foto não encontrada." }, { status: 404 });
+  const { error: storageError } = await supabase.storage.from("event-photos").remove([photo.storage_path]);
+  if (storageError) return NextResponse.json({ error: "Não foi possível remover o arquivo." }, { status: 400 });
+  const { error } = await supabase.from("photos").delete().eq("id", parsed.data.photoId).eq("event_id", id);
+  return error ? NextResponse.json({ error: "Não foi possível excluir a foto." }, { status: 400 }) : NextResponse.json({ ok: true });
+}
